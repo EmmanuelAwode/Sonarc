@@ -22,6 +22,9 @@ public:
     void setTilt(float dbPerOctave);
     void setShowPeakHold(bool shouldShow);
 
+    // Clean mode (overlay / stick / hidden controls) drops dB labels and info text.
+    void setCleanMode(bool clean);
+
     void paint(juce::Graphics&) override;
     void resized() override;
     void mouseMove(const juce::MouseEvent&) override;
@@ -42,6 +45,8 @@ private:
     juce::Rectangle<float> plotArea() const noexcept;
     void drawGrid(juce::Graphics&, juce::Rectangle<float> area) const;
     void drawReadout(juce::Graphics&, juce::Rectangle<float> area) const;
+    void updatePeakReadout();
+    juce::ColourGradient frequencyGradient(float alpha, float brighten = 0.0f) const;
     void renderBackground(float pixelScale);
 
     static constexpr float minHz = 20.0f, maxHz = 20000.0f;
@@ -60,6 +65,10 @@ private:
     // they are rendered once into an image instead of every frame.
     juce::Image background;
     float backgroundScale = 0.0f;
+
+    bool cleanMode = false;
+    juce::String peakText;     // dominant frequency, e.g. "-12.6 dB  87.1 Hz  F2 -3c"
+    double lastPeakTextMs = 0.0;
 
     bool hovering = false;
     float hoverX = 0.0f;

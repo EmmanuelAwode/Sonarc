@@ -9,16 +9,41 @@ namespace {
 constexpr int kControlBarHeight = 38;
 constexpr int kStatusBarHeight = 20;
 
-const char* viewModeKey(MainComponent::ViewMode mode)
+using ViewMode = MainComponent::ViewMode;
+
+struct ViewInfo
 {
-    switch (mode)
-    {
-        case MainComponent::ViewMode::Waveform: return "waveform";
-        case MainComponent::ViewMode::Both:     return "both";
-        case MainComponent::ViewMode::Spectrum: break;
-    }
-    return "spectrum";
-}
+    const char* key;   // stored in settings
+    const char* label; // shown in the View box and menu
+    bool spectrum, waveform, spectrogram;
+};
+
+// Indexed by ViewMode.
+constexpr ViewInfo kViews[] = {
+    { "spectrum",             "Spectrum",                 true,  false, false },
+    { "waveform",             "Waveform",                 false, true,  false },
+    { "spectrogram",          "Spectrogram",              false, false, true  },
+    { "both",                 "Spectrum + Wave",          true,  true,  false },
+    { "spectrum+spectrogram", "Spectrum + Spectrogram",   true,  false, true  },
+    { "all",                  "Wave + Spectrum + Sgram",  true,  true,  true  },
+};
+static_assert(std::size(kViews) == (size_t) ViewMode::Count);
+
+const ViewInfo& viewInfo(ViewMode mode) { return kViews[(size_t) mode]; }
+
+struct PaletteInfo
+{
+    const char* key;
+    const char* label;
+    SpectrogramView::Palette palette;
+};
+
+constexpr PaletteInfo kPalettes[] = {
+    { "sonarc",    "Sonarc (blue - cyan - amber)", SpectrogramView::Palette::Sonarc },
+    { "ember",     "Ember (purple - orange)",      SpectrogramView::Palette::Ember },
+    { "ice",       "Ice (blue - white)",           SpectrogramView::Palette::Ice },
+    { "grayscale", "Grayscale",                    SpectrogramView::Palette::Grayscale },
+};
 
 const char* stereoModeKey(WaveformView::StereoMode mode)
 {
@@ -96,6 +121,7 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     tiltSlider.onValueChange = [this]
     {
         spectrumView.setTilt((float) tiltSlider.getValue());
+        spectrogramView.setTilt((float) tiltSlider.getValue());
         settings.setSpectrumTilt((float) tiltSlider.getValue());
     };
 
@@ -128,10 +154,22 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     };
     addAndMakeVisible(overlayButton);
 
+    stickButton.setTooltip("Dock to the top of the screen as a toolbar that other windows can't cover (S)");
+    stickButton.setColour(juce::TextButton::buttonColourId, theme::raised);
+    stickButton.setColour(juce::TextButton::buttonOnColourId, theme::accent.withAlpha(0.35f));
+    stickButton.setColour(juce::TextButton::textColourOffId, theme::text);
+    stickButton.setColour(juce::TextButton::textColourOnId, theme::textBright);
+    stickButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    stickButton.onClick = [this]
+    {
+        if (auto* w = window())
+            w->setStickEdge(w->isStuck() ? MainWindow::StickEdge::None : MainWindow::StickEdge::Top);
+    };
+    addAndMakeVisible(stickButton);
+
     // View selector
-    viewBox.addItem("Spectrum", 1);
-    viewBox.addItem("Waveform", 2);
-    viewBox.addItem("Spectrum + Wave", 3);
+    for (size_t i = 0; i < std::size(kViews); ++i)
+        viewBox.addItem(kViews[i].label, (int) i + 1);
     viewBox.setTooltip("What to show (V cycles)");
     viewBox.onChange = [this] { setViewMode((ViewMode) (viewBox.getSelectedId() - 1)); };
     addAndMakeVisible(viewBox);
@@ -141,14 +179,26 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     waveformView.setStereoMode(stereo == "overlaid" ? WaveformView::StereoMode::Overlaid
                              : stereo == "mid"      ? WaveformView::StereoMode::Mid
                                                     : WaveformView::StereoMode::Stacked);
+    waveformView.setStyle(settings.waveformStyle() == "classic" ? WaveformView::Style::Classic : WaveformView::Style::Spectral);
     waveformView.setWindowSeconds(settings.waveformWindowSeconds());
     waveformView.setThickness(settings.waveformThickness());
     waveformView.onWindowChanged = [this](float seconds) { settings.setWaveformWindowSeconds(seconds); };
     addChildComponent(waveformView);
 
+    // Spectrogram
+    spectrogramView.setSpeed(settings.spectrogramSpeed());
+    spectrogramView.setRangeDb(settings.spectrogramRangeDb());
+    spectrogramView.setFftSize(settings.spectrogramFftSize());
+    engine.setSpectrogramFftSize(settings.spectrogramFftSize());
+    for (const auto& p : kPalettes)
+        if (settings.spectrogramPalette() == p.key)
+            spectrogramView.setPalette(p.palette);
+    addChildComponent(spectrogramView);
+
     // Receive the visualisers' mouse events too, for dragging and the context menu.
     spectrumView.addMouseListener(this, false);
     waveformView.addMouseListener(this, false);
+    spectrogramView.addMouseListener(this, false);
 
     statusLabel.setFont(theme::font(11.5f));
     statusLabel.setColour(juce::Label::textColourId, theme::textDim);
@@ -165,10 +215,14 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     engine.setSpectrumDecay((float) decaySlider.getValue());
     engine.setPeakHoldSeconds(peakHoldButton.getToggleState() ? 1.5f : 0.0f);
     spectrumView.setTilt((float) tiltSlider.getValue());
+    spectrogramView.setTilt((float) tiltSlider.getValue());
     spectrumView.setShowPeakHold(peakHoldButton.getToggleState());
 
-    const auto view = settings.viewMode();
-    setViewMode(view == "waveform" ? ViewMode::Waveform : view == "both" ? ViewMode::Both : ViewMode::Spectrum);
+    auto initialView = ViewMode::Spectrum;
+    for (size_t i = 0; i < std::size(kViews); ++i)
+        if (settings.viewMode() == kViews[i].key)
+            initialView = (ViewMode) i;
+    setViewMode(initialView);
 
     const auto saved = settings.deviceSelection();
     refreshDeviceList();
@@ -337,6 +391,7 @@ void MainComponent::updateStatus()
         spectrumView.clearSpectrum();
         meterView.clearLevels();
         waveformView.clear();
+        spectrogramView.clear();
     }
     lastState = status.state;
 }
@@ -379,13 +434,20 @@ void MainComponent::drainWaveform()
     while (const auto n = engine.readWaveform(waveformScratch.data(), waveformScratch.size()))
         if (! frozen)
             waveformView.append(waveformScratch.data(), n);
+
+    if (snapshot.sampleRate > 0)
+        spectrogramView.setRowRate((double) snapshot.sampleRate / (double) SpectrogramAnalyzer::kHopFrames);
+    while (const auto n = engine.readSpectrogram(spectrogramScratch.data(), spectrogramScratch.size()))
+        if (! frozen)
+            spectrogramView.appendRows(spectrogramScratch.data(), n);
 }
 
 void MainComponent::setViewMode(ViewMode mode)
 {
     viewMode = mode;
     viewBox.setSelectedId((int) mode + 1, juce::dontSendNotification);
-    settings.setViewMode(viewModeKey(mode));
+    settings.setViewMode(viewInfo(mode).key);
+    engine.setSpectrogramEnabled(viewInfo(mode).spectrogram); // only analyse what is shown
     resized();
 }
 
@@ -400,7 +462,11 @@ void MainComponent::paintOverChildren(juce::Graphics& g)
     if (! frozen)
         return;
 
-    const auto target = waveformView.isVisible() ? waveformView.getBounds() : spectrumView.getBounds();
+    auto target = spectrumView.getBounds();
+    if (waveformView.isVisible())
+        target = waveformView.getBounds();
+    else if (spectrogramView.isVisible() && ! spectrumView.isVisible())
+        target = spectrogramView.getBounds();
     const auto badge = juce::Rectangle<float>(0, 0, 118, 20).withCentre({ (float) target.getCentreX(), (float) target.getY() + 16.0f });
     g.setColour(theme::raised.withAlpha(0.92f));
     g.fillRoundedRectangle(badge, 4.0f);
@@ -433,7 +499,10 @@ void MainComponent::overlayModeChanged(bool isOverlay)
 void MainComponent::windowStateChanged()
 {
     if (auto* w = window())
+    {
         pinButton.setToggleState(w->isPinnedOnTop(), juce::dontSendNotification);
+        stickButton.setToggleState(w->isStuck(), juce::dontSendNotification);
+    }
 }
 
 void MainComponent::showContextMenu()
@@ -448,11 +517,53 @@ void MainComponent::showContextMenu()
                             [w, percent] { w->setWindowOpacity((float) percent / 100.0f); });
 
     juce::PopupMenu viewMenu;
-    viewMenu.addItem("Spectrum", true, viewMode == ViewMode::Spectrum, [this] { setViewMode(ViewMode::Spectrum); });
-    viewMenu.addItem("Waveform", true, viewMode == ViewMode::Waveform, [this] { setViewMode(ViewMode::Waveform); });
-    viewMenu.addItem("Spectrum + waveform", true, viewMode == ViewMode::Both, [this] { setViewMode(ViewMode::Both); });
+    for (size_t i = 0; i < std::size(kViews); ++i)
+        viewMenu.addItem(kViews[i].label, true, viewMode == (ViewMode) i, [this, i] { setViewMode((ViewMode) i); });
+
+    juce::PopupMenu sgramMenu;
+    for (float speed : { 15.0f, 30.0f, 60.0f, 120.0f, 240.0f })
+        sgramMenu.addItem("Speed " + juce::String(juce::roundToInt(speed)) + " px/s", true,
+                          std::abs(spectrogramView.speed() - speed) < 0.5f, [this, speed]
+                          {
+                              spectrogramView.setSpeed(speed);
+                              settings.setSpectrogramSpeed(speed);
+                          });
+    sgramMenu.addSeparator();
+    for (int size : { 1024, 2048, 4096, 8192 })
+        sgramMenu.addItem("Resolution: FFT " + juce::String(size), true, settings.spectrogramFftSize() == size, [this, size]
+                          {
+                              engine.setSpectrogramFftSize(size);
+                              spectrogramView.setFftSize(size);
+                              settings.setSpectrogramFftSize(size);
+                          });
+    sgramMenu.addSeparator();
+    for (const auto& p : kPalettes)
+        sgramMenu.addItem(p.label, true, spectrogramView.palette() == p.palette, [this, p]
+                          {
+                              spectrogramView.setPalette(p.palette);
+                              settings.setSpectrogramPalette(p.key);
+                          });
+    sgramMenu.addSeparator();
+    for (float rangeDb : { 60.0f, 90.0f, 120.0f })
+        sgramMenu.addItem("Range " + juce::String(juce::roundToInt(rangeDb)) + " dB", true,
+                          std::abs(spectrogramView.rangeDb() - rangeDb) < 0.5f, [this, rangeDb]
+                          {
+                              spectrogramView.setRangeDb(rangeDb);
+                              settings.setSpectrogramRangeDb(rangeDb);
+                          });
 
     juce::PopupMenu waveMenu;
+    waveMenu.addItem("Style: Spectral (coloured by frequency)", true, waveformView.style() == WaveformView::Style::Spectral, [this]
+                     {
+                         waveformView.setStyle(WaveformView::Style::Spectral);
+                         settings.setWaveformStyle("spectral");
+                     });
+    waveMenu.addItem("Style: Classic", true, waveformView.style() == WaveformView::Style::Classic, [this]
+                     {
+                         waveformView.setStyle(WaveformView::Style::Classic);
+                         settings.setWaveformStyle("classic");
+                     });
+    waveMenu.addSeparator();
     for (float seconds : { 0.05f, 0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f })
         waveMenu.addItem(seconds < 1.0f ? juce::String(juce::roundToInt(seconds * 1000.0f)) + " ms" : juce::String(seconds, 0) + " s",
                          true, std::abs(waveformView.windowSeconds() - seconds) < 0.001f, [this, seconds]
@@ -482,8 +593,19 @@ void MainComponent::showContextMenu()
     juce::PopupMenu menu;
     menu.addSubMenu("View", viewMenu);
     menu.addSubMenu("Waveform", waveMenu);
+    menu.addSubMenu("Spectrogram", sgramMenu);
     menu.addItem("Freeze display\tF", true, frozen, [this] { setFrozen(! frozen); });
     menu.addSeparator();
+    juce::PopupMenu stickMenu;
+    using Edge = MainWindow::StickEdge;
+    stickMenu.addItem("Off", true, w->stickEdge() == Edge::None, [w] { w->setStickEdge(Edge::None); });
+    stickMenu.addItem("Top of screen\tS", true, w->stickEdge() == Edge::Top, [w] { w->setStickEdge(Edge::Top); });
+    stickMenu.addItem("Bottom of screen", true, w->stickEdge() == Edge::Bottom, [w] { w->setStickEdge(Edge::Bottom); });
+    stickMenu.addSeparator();
+    for (int height : { 60, 80, 110, 140, 180, 240 })
+        stickMenu.addItem("Bar height " + juce::String(height) + " px", true, w->stickHeight() == height,
+                          [w, height] { w->setStickHeight(height); });
+    menu.addSubMenu("Stick to screen edge", stickMenu);
     menu.addItem("Always on top\tT", true, w->isPinnedOnTop(), [w] { w->setPinnedOnTop(! w->isPinnedOnTop()); });
     menu.addItem("Overlay mode (no frame)\tO", true, w->isOverlayMode(), [w] { w->setOverlayMode(! w->isOverlayMode()); });
     menu.addItem("Show controls\tH", true, controlsVisible, [this] { toggleControls(); });
@@ -540,7 +662,12 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     }
     if (c == 'v')
     {
-        setViewMode((ViewMode) (((int) viewMode + 1) % 3));
+        setViewMode((ViewMode) (((int) viewMode + 1) % (int) ViewMode::Count));
+        return true;
+    }
+    if (c == 's' && w != nullptr)
+    {
+        w->setStickEdge(w->isStuck() ? MainWindow::StickEdge::None : MainWindow::StickEdge::Top);
         return true;
     }
     if (c == 't' && w != nullptr)
@@ -578,7 +705,7 @@ void MainComponent::resized()
     auto bounds = getLocalBounds();
 
     for (auto* c : std::initializer_list<juce::Component*> { &deviceBox, &fftBox, &smoothingSlider, &decaySlider,
-                                                             &tiltSlider, &peakHoldButton, &pinButton, &overlayButton, &viewBox,
+                                                             &tiltSlider, &peakHoldButton, &pinButton, &overlayButton, &stickButton, &viewBox,
                                                              &statusLabel })
         c->setVisible(controlsVisible);
 
@@ -602,38 +729,49 @@ void MainComponent::resized()
         flex.items.add(item(peakHoldButton, 96.0f, 90.0f));
         flex.items.add(item(pinButton, 84.0f, 80.0f));
         flex.items.add(item(overlayButton, 72.0f, 64.0f));
+        flex.items.add(item(stickButton, 60.0f, 52.0f));
         flex.performLayout(bar);
 
         statusLabel.setBounds(bounds.removeFromBottom(kStatusBarHeight).reduced(6, 0));
     }
+
+    // With the controls hidden (overlay, stick, H) the visualisers drop their labels for a clean stream look.
+    spectrumView.setCleanMode(! controlsVisible);
+    waveformView.setCleanMode(! controlsVisible);
+    spectrogramView.setCleanMode(! controlsVisible);
 
     const int margin = controlsVisible ? 6 : 3;
     bounds.reduce(margin, controlsVisible ? 0 : margin);
     meterView.setBounds(bounds.removeFromRight(juce::jmin(StereoPeakMeterView::preferredWidth, bounds.getWidth() / 3)));
     bounds.removeFromRight(margin);
 
-    spectrumView.setVisible(viewMode != ViewMode::Waveform);
-    waveformView.setVisible(viewMode != ViewMode::Spectrum);
+    // Visible panes in display order (left to right, or top to bottom) with relative sizes.
+    const auto& info = viewInfo(viewMode);
+    std::vector<std::pair<juce::Component*, float>> panes;
+    if (info.waveform)    panes.push_back({ &waveformView, 0.8f });
+    if (info.spectrum)    panes.push_back({ &spectrumView, 1.0f });
+    if (info.spectrogram) panes.push_back({ &spectrogramView, 1.0f });
 
-    if (viewMode == ViewMode::Both)
+    for (auto* c : std::initializer_list<juce::Component*> { &waveformView, &spectrumView, &spectrogramView })
+        c->setVisible(false);
+
+    // Side by side in a wide strip, stacked when the window is tall.
+    const bool sideBySide = bounds.getWidth() > bounds.getHeight() * (int) panes.size();
+    float totalWeight = 0.0f;
+    for (const auto& pane : panes)
+        totalWeight += pane.second;
+
+    const int available = (sideBySide ? bounds.getWidth() : bounds.getHeight()) - margin * ((int) panes.size() - 1);
+    for (size_t i = 0; i < panes.size(); ++i)
     {
-        // Side by side in a wide strip, stacked when the window is tall.
-        if (bounds.getWidth() > bounds.getHeight() * 2)
-        {
-            waveformView.setBounds(bounds.removeFromLeft((int) (bounds.getWidth() * 0.4f)));
-            bounds.removeFromLeft(margin);
-        }
-        else
-        {
-            waveformView.setBounds(bounds.removeFromBottom((int) (bounds.getHeight() * 0.45f)));
-            bounds.removeFromBottom(margin);
-        }
-        spectrumView.setBounds(bounds);
-    }
-    else
-    {
-        spectrumView.setBounds(bounds);
-        waveformView.setBounds(bounds);
+        auto* component = panes[i].first;
+        const bool last = i + 1 == panes.size();
+        const int extent = last ? (sideBySide ? bounds.getWidth() : bounds.getHeight())
+                                : (int) ((float) available * panes[i].second / totalWeight);
+        component->setBounds(sideBySide ? bounds.removeFromLeft(extent) : bounds.removeFromTop(extent));
+        component->setVisible(true);
+        if (! last)
+            sideBySide ? bounds.removeFromLeft(margin) : bounds.removeFromTop(margin);
     }
 }
 

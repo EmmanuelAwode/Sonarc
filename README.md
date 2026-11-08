@@ -137,14 +137,26 @@ Play music. With **System default output** selected, the spectrum and meters fol
 - **Peak hold:** a grey line on the spectrum and a white tick on the meter.
 - **Meter:** solid bar = RMS (300 ms), lighter bar = sample peak, top boxes = max peak since reset (red = a sample reached 0 dBFS). **Click the meter** to reset.
 - **H:** hide or show the controls for a clean view.
-- **View (V):** *Spectrum*, *Waveform* or *Spectrum + Wave*. In a wide window the two sit side by side; in a tall window they stack.
+- **View (V):** *Spectrum*, *Waveform*, *Spectrogram*, or the combinations *Spectrum + Wave*, *Spectrum + Spectrogram* and all three. Panes sit side by side in a wide window and stack in a tall one.
 - **Waveform:** a scrolling view of the real signal, with newest audio at the right.
+  - **Spectral style (default):** colour shows what's sounding: bass is pink-red, mids amber and highs cyan (split at 250 Hz and 2.5 kHz). It is drawn mirrored, with a solid RMS core inside a softer peak body and a glow. Heights use a square-root scale so a mix fills the lane. **Classic style** is a plain, linear min/max trace per channel.
   - Every pixel shows the true min/max of the samples it covers, so short peaks never disappear when zoomed out.
   - **Mouse wheel** zooms from 20 ms (individual cycles) to 10 s.
   - Right-click → *Waveform* for presets, **Stacked L/R**, **Overlaid L+R** or **Mono (mid)**, and minimum line thickness.
   - Red marks at a lane's edge show samples at or beyond 0 dBFS.
-- **Freeze (F):** pauses the spectrum, waveform and meters so you can inspect a moment. Press F again to go live.
-- **On top (T):** pins Sonarc above every other window, such as a browser, video player, FL Studio or OBS.
+- **Spectrum readout:** the top-left of the spectrum shows the loudest peak's level, frequency and nearest musical note with cents (e.g. `-12.6 dB  87.1 Hz  F2 -3c`). It updates 8 times a second.
+- **Clean look:** with the controls hidden (overlay, stick or H), the visualisers drop their axis labels and info text for a stream-ready picture.
+- **Spectrogram:** a scrolling history of the spectrum. Time runs left to right with the newest at the right edge, frequency runs from 20 Hz at the bottom to 20 kHz at the top on a log scale, and colour shows level.
+  - Right-click → *Spectrogram* sets the **speed** (15–240 px/s), the **resolution** (FFT 1024–8192: larger is sharper in frequency, especially the low end, but blurrier in time), the **palette** (Sonarc, Ember, Ice, Grayscale) and the **range** (60/90/120 dB below 0 dBFS).
+  - It uses the same calibration and *Tilt* as the spectrum.
+  - It is computed only while it is on screen.
+- **Freeze (F):** pauses everything (spectrum, waveform, spectrogram and meters) so you can inspect a moment. Press F again to go live.
+- **On top (T):** pins Sonarc above every other window, such as a browser, video player, FL Studio or OBS. A watchdog checks every 0.75 s and puts Sonarc back on top if another app (e.g. another always-on-top window) has covered it.
+- **Stick (S, or the Stick button):** docks Sonarc across the full width of the screen's top edge, like a toolbar.
+  - Windows reserves that strip, so maximised windows sit **below** the bar instead of covering it. It works like the taskbar.
+  - Right-click → *Stick to screen edge* chooses top or bottom and the bar height (60–240 px).
+  - When a fullscreen game or video opens, the bar steps aside and comes back when it closes.
+  - Press S again (or double-click) to return the window to where it was.
 - **Overlay (O):** removes the title bar and frame. Drag anywhere on the spectrum to move the window and drag the edges to resize it. **Double-click or press Esc** to get the frame back. The meters stay in the same place on screen when you switch.
 - **Right-click** anywhere on the spectrum for all window options: always on top, overlay, show controls, **opacity** (100–30%), reset peaks and quit.
 - Pin, overlay, opacity and window position are remembered between launches.
@@ -169,7 +181,7 @@ Settings and the window position are saved to `%APPDATA%\Sonarc\settings.json`.
 
 ## Roadmap
 
-- **Phase 2:** spectrogram, goniometer/correlation, loudness (BS.1770 / R128) (waveform is done)
+- **Phase 2:** goniometer/correlation, loudness (BS.1770 / R128) (waveform and spectrogram are done)
 - **Phase 3:** modular, rearrangeable meters, layouts, themes, presets
-- **Phase 4:** OBS clean mode, per-pixel transparent background, FPS setting (always-on-top, borderless overlay and window opacity are done)
+- **Phase 4:** per-pixel transparent background, FPS setting (always-on-top, stick/dock mode, borderless overlay, clean stream look and window opacity are done)
 - **Phase 5:** profiling, more reconnection hardening, installer, portable build

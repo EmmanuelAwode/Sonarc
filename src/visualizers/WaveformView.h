@@ -10,13 +10,21 @@
 
 namespace sonarc {
 
-// Scrolling waveform: newest audio at the right edge. Each pixel column shows
-// the true min/max of the samples it covers, so peaks are never lost when
-// zoomed out. Mouse wheel zooms the time window.
+// Scrolling waveform: newest audio at the right edge. Mouse wheel zooms.
+//
+// Styles:
+//  - Spectral (default): mirrored, coloured by frequency content (lows warm
+//    red, mids amber, highs cyan), with a bright RMS core inside the peak
+//    envelope and a soft glow. Rendered column by column into an image, so
+//    each slice of audio is only drawn once.
+//  - Classic: plain min/max envelope per channel.
+// Either way each pixel column covers the true min/max of its samples, so
+// short peaks never disappear when zoomed out.
 class WaveformView final : public juce::Component
 {
 public:
     enum class StereoMode { Stacked, Overlaid, Mid };
+    enum class Style { Spectral, Classic };
 
     static constexpr float minWindowSeconds = 0.02f;
     static constexpr float maxWindowSeconds = 10.0f;
@@ -34,8 +42,14 @@ public:
     void setStereoMode(StereoMode mode);
     StereoMode stereoMode() const noexcept { return mode; }
 
+    void setStyle(Style newStyle);
+    Style style() const noexcept { return currentStyle; }
+
     void setThickness(float pixels);
     float thickness() const noexcept { return minSpanHeight; }
+
+    // Clean mode (overlay / stick / hidden controls) drops labels for a stream-ready look.
+    void setCleanMode(bool clean);
 
     std::function<void(float)> onWindowChanged; // after a mouse-wheel zoom
 
@@ -58,9 +72,17 @@ private:
     juce::Rectangle<float> plotArea() const noexcept;
     std::vector<Lane> lanes();
     bool aggregate(std::uint64_t start, std::uint64_t end, WaveBucket& result) const noexcept;
+    float yFor(const Lane& lane, float value) const noexcept;
+    juce::Colour bandColour(const WaveBucket&) const noexcept;
+    void invalidateSpectral() noexcept { spectralDirty = true; }
+
+    void paintClassic(juce::Graphics&, juce::Rectangle<float> area);
     void addSpan(Lane& lane, float x, float width, const WaveBucket& bucket);
     void drawEnvelope(juce::Graphics&, const Lane& lane, float pixelsPerBucket, juce::Colour colour);
-    float yFor(const Lane& lane, float value) const noexcept;
+
+    void paintSpectral(juce::Graphics&, juce::Rectangle<float> area, float pixelScale);
+    void renderSpectralColumn(int x, std::uint64_t column);
+
     void renderBackground(float pixelScale);
 
     std::uint32_t sampleRate = 0;
@@ -69,12 +91,22 @@ private:
 
     float window = 2.0f;
     StereoMode mode = StereoMode::Stacked;
+    Style currentStyle = Style::Spectral;
     float minSpanHeight = 1.5f;
+    bool cleanMode = false;
 
     juce::RectangleList<float> spansA, spansB, clips;
     juce::Path envelope;
     juce::Image background;
     float backgroundScale = 0.0f;
+
+    // Spectral style: a ring image, one physical-pixel column per slice of time.
+    juce::Image spectralImage;
+    bool spectralDirty = true;
+    float spectralScale = 0.0f;
+    std::uint64_t spectralPerColumn = 1;
+    std::uint64_t nextSpectralColumn = 0;
+    int spectralWriteX = 0;
 };
 
 } // namespace sonarc

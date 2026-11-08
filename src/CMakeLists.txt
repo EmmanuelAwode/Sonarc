@@ -1,4 +1,4 @@
-# ---------------------------------------------------------------------------
+﻿# ---------------------------------------------------------------------------
 # sonarc_core: capture engine + DSP. Plain C++20 and Win32, no JUCE, so it can
 # be unit tested on its own and reused by a future plugin bridge.
 # ---------------------------------------------------------------------------
@@ -7,6 +7,8 @@ add_library(sonarc_core STATIC
     audio/WasapiCaptureBackend.cpp
     dsp/Fft.cpp
     dsp/LevelMeter.cpp
+    dsp/MagnitudeSpectrum.cpp
+    dsp/SpectrogramAnalyzer.cpp
     dsp/SpectrumAnalyzer.cpp)
 
 target_include_directories(sonarc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -29,7 +31,9 @@ target_sources(Sonarc PRIVATE
     settings/AppSettings.cpp
     ui/MainComponent.cpp
     ui/MainWindow.cpp
+    ui/WindowsDesktop.cpp
     ui/SonarcLookAndFeel.cpp
+    visualizers/SpectrogramView.cpp
     visualizers/SpectrumView.cpp
     visualizers/StereoPeakMeterView.cpp
     visualizers/WaveformView.cpp)
@@ -49,6 +53,7 @@ target_link_libraries(Sonarc
     PRIVATE
         sonarc_core
         juce::juce_gui_extra
+        comctl32
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

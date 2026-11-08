@@ -1,7 +1,7 @@
 #pragma once
 
 #include "audio/AudioTypes.h"
-#include "dsp/Fft.h"
+#include "dsp/MagnitudeSpectrum.h"
 
 #include <complex>
 #include <cstdint>
@@ -52,12 +52,9 @@ private:
     std::size_t mask = 0;
     SpectrumBallistics ballistics;
 
-    std::unique_ptr<RealFft> fft;
+    MagnitudeSpectrum magnitude;
     std::vector<float> history;
     std::size_t writePosition = 0;
-    std::vector<float> window, frame;
-    std::vector<std::complex<float>> bins;
-    float binScale = 0.0f;
 
     std::vector<float> rawDb, averagedDb, shownDb, peakDb, peakHoldRemaining;
 };

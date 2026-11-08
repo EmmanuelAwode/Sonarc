@@ -91,6 +91,12 @@ void AudioEngine::setFftSize(int size) noexcept
         fftSize = std::clamp(size, 256, 32768);
 }
 
+void AudioEngine::setSpectrogramFftSize(int size) noexcept
+{
+    if (RealFft::isPowerOfTwo(size))
+        spectrogramFftSize = std::clamp(size, 256, 32768);
+}
+
 bool AudioEngine::readSnapshot(AnalysisSnapshot& destination)
 {
     std::lock_guard lock(snapshotLock);
@@ -117,6 +123,8 @@ void AudioEngine::analysisLoop()
     SpectrumAnalyzer spectrum;
     StereoLevelMeter meter;
     WaveformBuilder waveform;
+    SpectrogramAnalyzer spectrogram;
+    bool spectrogramRunning = false;
     std::vector<StereoFrame> block(4096);
     std::vector<WaveBucket> buckets(WaveformBuilder::maxBucketsFor(block.size()));
 
@@ -141,12 +149,13 @@ void AudioEngine::analysisLoop()
             seenGeneration = generation;
             sampleRate = streamSampleRate;
             ring.discardAll();
-            waveform.reset();
+            waveform.prepare(sampleRate);
 
             if (sampleRate > 0)
             {
                 spectrum.prepare(sampleRate, fftSize);
                 meter.prepare(sampleRate);
+                spectrogram.prepare(sampleRate, spectrogramFftSize);
             }
         }
 
@@ -155,6 +164,13 @@ void AudioEngine::analysisLoop()
 
         if (fftSize != spectrum.fftSize())
             spectrum.prepare(sampleRate, fftSize);
+
+        const bool wantSpectrogram = spectrogramEnabled;
+        if (wantSpectrogram && spectrogramFftSize != spectrogram.fftSize())
+            spectrogram.prepare(sampleRate, spectrogramFftSize);
+        else if (wantSpectrogram && ! spectrogramRunning)
+            spectrogram.reset(); // don't show audio from before it was switched off
+        spectrogramRunning = wantSpectrogram;
 
         spectrum.setBallistics({ spectrumSmoothing, spectrumDecay, peakHoldSeconds, 15.0f });
 
@@ -171,6 +187,8 @@ void AudioEngine::analysisLoop()
             meter.process(block.data(), n);
             // If the UI isn't draining (e.g. minimised) the ring fills and new peaks are dropped.
             waveformRing.push(buckets.data(), waveform.process(block.data(), n, buckets.data()));
+            if (spectrogramRunning)
+                spectrogram.process(block.data(), n, [this](const SpectrogramRow& row) { spectrogramRing.push(&row, 1); });
             framesRead += n;
         }
 

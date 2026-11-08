@@ -52,8 +52,29 @@ public:
     juce::String waveformStereoMode() const; // "stacked", "overlaid" or "mid"
     void setWaveformStereoMode(const juce::String& mode);
 
+    juce::String waveformStyle() const; // "spectral" or "classic"
+    void setWaveformStyle(const juce::String& style);
+
     float waveformThickness() const;
     void setWaveformThickness(float pixels);
+
+    int spectrogramFftSize() const;
+    void setSpectrogramFftSize(int size);
+
+    float spectrogramSpeed() const; // pixels per second
+    void setSpectrogramSpeed(float pixelsPerSecond);
+
+    juce::String spectrogramPalette() const; // "sonarc", "ember", "ice" or "grayscale"
+    void setSpectrogramPalette(const juce::String& palette);
+
+    float spectrogramRangeDb() const;
+    void setSpectrogramRangeDb(float decibels);
+
+    juce::String stickMode() const; // "off", "top" or "bottom"
+    void setStickMode(const juce::String& mode);
+
+    int stickHeight() const; // logical pixels
+    void setStickHeight(int pixels);
 
     juce::String windowState() const;
     void setWindowState(const juce::String& state);

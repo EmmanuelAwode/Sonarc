@@ -2,6 +2,7 @@
 
 #include "audio/CaptureBackend.h"
 #include "dsp/AnalysisSnapshot.h"
+#include "dsp/SpectrogramAnalyzer.h"
 #include "dsp/WaveformBuilder.h"
 #include "util/SpscRingBuffer.h"
 
@@ -61,6 +62,15 @@ public:
         return waveformRing.pop(destination, maxCount);
     }
 
+    // Spectrogram rows, one per SpectrogramAnalyzer::kHopFrames frames. Only
+    // computed while enabled, so a hidden spectrogram costs nothing.
+    void setSpectrogramEnabled(bool enabled) noexcept { spectrogramEnabled = enabled; }
+    void setSpectrogramFftSize(int size) noexcept;
+    std::size_t readSpectrogram(SpectrogramRow* destination, std::size_t maxCount) noexcept
+    {
+        return spectrogramRing.pop(destination, maxCount);
+    }
+
 private:
     void writeFrames(const StereoFrame* frames, std::size_t count) noexcept override;
     bool restartStream();
@@ -87,11 +97,14 @@ private:
     std::atomic<float> spectrumDecay { 60.0f };
     std::atomic<float> peakHoldSeconds { 1.5f };
     std::atomic<bool> resetPeaksRequested { false };
+    std::atomic<bool> spectrogramEnabled { false };
+    std::atomic<int> spectrogramFftSize { 2048 };
 
     // analysis -> UI
     std::mutex snapshotLock;
     AnalysisSnapshot published;
-    SpscRingBuffer<WaveBucket> waveformRing { 1 << 18 }; // ~43 s of peaks at 48 kHz
+    SpscRingBuffer<WaveBucket> waveformRing { 1 << 17 }; // ~22 s of peaks at 48 kHz
+    SpscRingBuffer<SpectrogramRow> spectrogramRing { 1024 }; // ~5 s of rows at 48 kHz
 
     std::atomic<bool> quit { false };
     std::thread analysisThread;

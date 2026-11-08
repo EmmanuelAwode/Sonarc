@@ -19,6 +19,13 @@ namespace keys {
     static const juce::Identifier waveformWindow { "waveformWindowSeconds" };
     static const juce::Identifier waveformStereo { "waveformStereoMode" };
     static const juce::Identifier waveformThickness { "waveformThickness" };
+    static const juce::Identifier waveformStyle { "waveformStyle" };
+    static const juce::Identifier spectrogramFft { "spectrogramFftSize" };
+    static const juce::Identifier spectrogramSpeed { "spectrogramPixelsPerSecond" };
+    static const juce::Identifier spectrogramPalette { "spectrogramPalette" };
+    static const juce::Identifier spectrogramRange { "spectrogramRangeDb" };
+    static const juce::Identifier stickMode { "stickMode" };
+    static const juce::Identifier stickHeight { "stickHeight" };
 }
 
 AppSettings::AppSettings(juce::File settingsFile) : file(std::move(settingsFile))
@@ -105,8 +112,29 @@ void AppSettings::setWaveformWindowSeconds(float seconds) { set(keys::waveformWi
 juce::String AppSettings::waveformStereoMode() const { return get(keys::waveformStereo, "stacked").toString(); }
 void AppSettings::setWaveformStereoMode(const juce::String& mode) { set(keys::waveformStereo, mode); }
 
+juce::String AppSettings::waveformStyle() const { return get(keys::waveformStyle, "spectral").toString(); }
+void AppSettings::setWaveformStyle(const juce::String& style) { set(keys::waveformStyle, style); }
+
 float AppSettings::waveformThickness() const { return (float) (double) get(keys::waveformThickness, 1.5); }
 void AppSettings::setWaveformThickness(float pixels) { set(keys::waveformThickness, pixels); }
+
+int AppSettings::spectrogramFftSize() const { return get(keys::spectrogramFft, 2048); }
+void AppSettings::setSpectrogramFftSize(int size) { set(keys::spectrogramFft, size); }
+
+float AppSettings::spectrogramSpeed() const { return (float) (double) get(keys::spectrogramSpeed, 60.0); }
+void AppSettings::setSpectrogramSpeed(float pixelsPerSecond) { set(keys::spectrogramSpeed, pixelsPerSecond); }
+
+juce::String AppSettings::spectrogramPalette() const { return get(keys::spectrogramPalette, "sonarc").toString(); }
+void AppSettings::setSpectrogramPalette(const juce::String& palette) { set(keys::spectrogramPalette, palette); }
+
+float AppSettings::spectrogramRangeDb() const { return (float) (double) get(keys::spectrogramRange, 90.0); }
+void AppSettings::setSpectrogramRangeDb(float decibels) { set(keys::spectrogramRange, decibels); }
+
+juce::String AppSettings::stickMode() const { return get(keys::stickMode, "off").toString(); }
+void AppSettings::setStickMode(const juce::String& mode) { set(keys::stickMode, mode); }
+
+int AppSettings::stickHeight() const { return get(keys::stickHeight, 110); }
+void AppSettings::setStickHeight(int pixels) { set(keys::stickHeight, pixels); }
 
 juce::String AppSettings::windowState() const { return get(keys::windowState, "").toString(); }
 void AppSettings::setWindowState(const juce::String& state) { set(keys::windowState, state); }

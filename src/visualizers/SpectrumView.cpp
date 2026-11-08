@@ -28,7 +28,79 @@ void SpectrumView::setSpectrum(const AnalysisSnapshot& snapshot)
         background = {};
     }
 
+    // ~8 updates per second: fast enough to follow, slow enough to read.
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (now - lastPeakTextMs > 125.0)
+    {
+        lastPeakTextMs = now;
+        updatePeakReadout();
+    }
+
     repaint();
+}
+
+void SpectrumView::setCleanMode(bool clean)
+{
+    if (clean == cleanMode)
+        return;
+    cleanMode = clean;
+    rebuildColumns();
+    background = {};
+    repaint();
+}
+
+// Loudest spectral peak with parabolic interpolation, as a level, frequency and musical note.
+void SpectrumView::updatePeakReadout()
+{
+    peakText.clear();
+    if (spectrum.size() < 3 || sampleRate == 0 || fftSize == 0)
+        return;
+
+    const double hzPerBin = (double) sampleRate / fftSize;
+    const int first = juce::jmax(1, (int) std::ceil(minHz / hzPerBin));
+    const int last = juce::jmin((int) spectrum.size() - 2, (int) std::floor(maxHz / hzPerBin));
+    if (first >= last)
+        return;
+
+    int best = first;
+    for (int k = first + 1; k <= last; ++k)
+        if (spectrum[(size_t) k] > spectrum[(size_t) best])
+            best = k;
+
+    const float level = spectrum[(size_t) best];
+    if (level < -80.0f)
+        return;
+
+    const double a = spectrum[(size_t) best - 1], b = level, c = spectrum[(size_t) best + 1];
+    const double denominator = a - 2.0 * b + c;
+    const double offset = std::abs(denominator) > 1.0e-9 ? juce::jlimit(-0.5, 0.5, 0.5 * (a - c) / denominator) : 0.0;
+    const double hz = (best + offset) * hzPerBin;
+
+    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    const double midi = 69.0 + 12.0 * std::log2(hz / 440.0);
+    const int note = (int) std::lround(midi);
+    const int cents = (int) std::lround((midi - note) * 100.0);
+    const int octave = note / 12 - 1;
+
+    const auto frequency = hz >= 1000.0 ? juce::String(hz / 1000.0, 2) + " kHz" : juce::String(hz, 1) + " Hz";
+    peakText << juce::String(level, 1) << " dB   " << frequency << "   " << names[((note % 12) + 12) % 12] << octave
+             << " " << (cents >= 0 ? "+" : "") << cents << "c";
+}
+
+// The spectrum's colour runs with frequency: violet bass through blue, cyan
+// and mint to gold and coral highs.
+juce::ColourGradient SpectrumView::frequencyGradient(float alpha, float brighten) const
+{
+    struct Stop { float hz; juce::uint32 argb; };
+    static constexpr Stop stops[] = { { 20.0f, 0xff6b4bff }, { 90.0f, 0xff2f7bff }, { 400.0f, 0xff22d3ee },
+                                      { 2000.0f, 0xff3ee6a8 }, { 6000.0f, 0xffffd166 }, { 20000.0f, 0xffff7a59 } };
+
+    auto colourOf = [&](const Stop& s) { return juce::Colour(s.argb).brighter(brighten).withAlpha(alpha); };
+    const float x0 = xForFrequency(minHz), x1 = xForFrequency(maxHz);
+    juce::ColourGradient gradient(colourOf(stops[0]), x0, 0.0f, colourOf(stops[std::size(stops) - 1]), x1, 0.0f, false);
+    for (size_t i = 1; i + 1 < std::size(stops); ++i)
+        gradient.addColour(std::log(stops[i].hz / minHz) / std::log(maxHz / minHz), colourOf(stops[i]));
+    return gradient;
 }
 
 void SpectrumView::clearSpectrum()
@@ -78,7 +150,7 @@ void SpectrumView::renderBackground(float pixelScale)
 
     g.setColour(theme::textDim);
     g.setFont(theme::font(10.5f));
-    if (fftSize > 0 && sampleRate > 0)
+    if (fftSize > 0 && sampleRate > 0 && ! cleanMode)
     {
         const auto info = "FFT " + juce::String(fftSize) + "  |  " + juce::String((double) sampleRate / fftSize, 1)
                         + " Hz/bin  |  tilt " + juce::String(tiltDbPerOctave, 1) + " dB/oct";
@@ -88,7 +160,8 @@ void SpectrumView::renderBackground(float pixelScale)
 
 juce::Rectangle<float> SpectrumView::plotArea() const noexcept
 {
-    return getLocalBounds().toFloat().reduced(1.0f, 4.0f).withTrimmedBottom(14.0f);
+    const auto bounds = getLocalBounds().toFloat();
+    return cleanMode ? bounds.reduced(1.0f, 2.0f) : bounds.reduced(1.0f, 4.0f).withTrimmedBottom(14.0f);
 }
 
 float SpectrumView::xForFrequency(float hz) const noexcept
@@ -166,8 +239,10 @@ void SpectrumView::drawGrid(juce::Graphics& g, juce::Rectangle<float> area) cons
     for (float db = 0.0f; db >= minDb; db -= 12.0f)
     {
         const float y = yForDb(db);
-        g.setColour(db == 0.0f ? theme::gridStrong : theme::grid);
+        g.setColour((db == 0.0f ? theme::gridStrong : theme::grid).withMultipliedAlpha(cleanMode ? 0.5f : 1.0f));
         g.drawHorizontalLine(juce::roundToInt(y), area.getX(), area.getRight());
+        if (cleanMode)
+            continue;
         g.setColour(theme::textDim.withAlpha(0.8f));
         g.drawText(juce::String((int) db), juce::Rectangle<float>(area.getX() + 4.0f, y + 1.0f, 40.0f, 12.0f),
                    juce::Justification::topLeft, false);
@@ -186,10 +261,12 @@ void SpectrumView::drawGrid(juce::Graphics& g, juce::Rectangle<float> area) cons
     for (const auto& mark : marks)
     {
         const float x = xForFrequency(mark.hz);
-        g.setColour(mark.major ? theme::gridStrong : theme::grid);
+        if (cleanMode && ! mark.major)
+            continue;
+        g.setColour((mark.major ? theme::gridStrong : theme::grid).withMultipliedAlpha(cleanMode ? 0.5f : 1.0f));
         g.drawVerticalLine(juce::roundToInt(x), area.getY(), area.getBottom());
 
-        if (*mark.label != 0)
+        if (*mark.label != 0 && ! cleanMode)
         {
             g.setColour(theme::textDim);
             const auto labelArea = juce::Rectangle<float>(x - 20.0f, area.getBottom() + 1.0f, 40.0f, 13.0f);
@@ -242,12 +319,20 @@ void SpectrumView::paint(juce::Graphics& g)
     fillPath.lineTo(left + (float) (columns.size() - 1), bottom);
     fillPath.closeSubPath();
 
-    g.setGradientFill(juce::ColourGradient(theme::accent.withAlpha(0.42f), 0.0f, area.getY(),
-                                           theme::accentDeep.withAlpha(0.04f), 0.0f, bottom, false));
+    // Fill: frequency-coloured, fading into the floor.
+    g.setGradientFill(frequencyGradient(0.55f));
+    g.fillPath(fillPath);
+    g.setGradientFill(juce::ColourGradient(theme::panel.withAlpha(0.0f), 0.0f, area.getY(),
+                                           theme::panel.withAlpha(0.92f), 0.0f, bottom, false));
     g.fillPath(fillPath);
 
-    g.setColour(theme::accent);
-    g.strokePath(linePath, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved));
+    // Line: two soft glow passes under a bright core.
+    g.setGradientFill(frequencyGradient(0.10f));
+    g.strokePath(linePath, juce::PathStrokeType(8.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setGradientFill(frequencyGradient(0.25f));
+    g.strokePath(linePath, juce::PathStrokeType(3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setGradientFill(frequencyGradient(1.0f, 0.35f));
+    g.strokePath(linePath, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     if (showPeakHold && ! peaks.empty())
     {
@@ -263,6 +348,19 @@ void SpectrumView::paint(juce::Graphics& g)
         }
         g.setColour(theme::textBright.withAlpha(0.35f));
         g.strokePath(peakPath, juce::PathStrokeType(1.0f));
+    }
+
+    if (peakText.isNotEmpty() && area.getHeight() > 30.0f)
+    {
+        const auto font = theme::font(cleanMode ? 11.5f : 12.0f, true);
+        g.setFont(font);
+        const float textWidth = juce::GlyphArrangement::getStringWidth(font, peakText) + 14.0f;
+        const auto box = juce::Rectangle<float>(area.getX() + (cleanMode ? 6.0f : 36.0f), area.getY() + 4.0f,
+                                                juce::jmin(textWidth, area.getWidth() - 12.0f), 17.0f);
+        g.setColour(theme::background.withAlpha(0.55f));
+        g.fillRoundedRectangle(box, 4.0f);
+        g.setColour(theme::textBright.withAlpha(0.92f));
+        g.drawText(peakText, box.reduced(7.0f, 0.0f), juce::Justification::centredLeft, true);
     }
 
     if (hovering)

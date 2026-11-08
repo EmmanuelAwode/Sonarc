@@ -4,6 +4,7 @@ add_executable(sonarc_tests
     LevelMeterTests.cpp
     RingBufferTests.cpp
     SampleConversionTests.cpp
+    SpectrogramAnalyzerTests.cpp
     SpectrumAnalyzerTests.cpp
     WaveformBuilderTests.cpp)
 

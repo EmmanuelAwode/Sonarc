@@ -63,6 +63,56 @@ TEST_CASE("Waveform partial buckets carry over between calls")
     CHECK_NEAR(out[0].maxRight, 0.75, 1e-6);
 }
 
+namespace {
+
+WaveBucket averageBands(double hz)
+{
+    WaveformBuilder builder;
+    builder.prepare(48000);
+    std::vector<StereoFrame> audio(48000);
+    for (std::size_t i = 0; i < audio.size(); ++i)
+    {
+        const auto s = 0.5f * static_cast<float>(std::sin(2.0 * std::numbers::pi * hz * static_cast<double>(i) / 48000.0));
+        audio[i] = { s, s };
+    }
+    std::vector<WaveBucket> out(WaveformBuilder::maxBucketsFor(audio.size()));
+    const auto n = builder.process(audio.data(), audio.size(), out.data());
+
+    WaveBucket sum;
+    for (std::size_t i = n / 2; i < n; ++i) // skip the filters' settling time
+    {
+        sum.msLow += out[i].msLow;
+        sum.msMidBand += out[i].msMidBand;
+        sum.msHigh += out[i].msHigh;
+        sum.msMid += out[i].msMid;
+    }
+    return sum;
+}
+
+} // namespace
+
+TEST_CASE("Waveform colour bands: bass, mid and treble tones land in their own band")
+{
+    const auto bass = averageBands(60.0);
+    CHECK(bass.msLow > 5.0f * bass.msMidBand);
+    CHECK(bass.msLow > 20.0f * bass.msHigh);
+
+    const auto mid = averageBands(800.0);
+    CHECK(mid.msMidBand > 2.0f * mid.msLow);
+    CHECK(mid.msMidBand > 2.0f * mid.msHigh);
+
+    const auto treble = averageBands(9000.0);
+    CHECK(treble.msHigh > 5.0f * treble.msMidBand);
+    CHECK(treble.msHigh > 20.0f * treble.msLow);
+}
+
+TEST_CASE("Waveform mean square of a sine is A^2 / 2")
+{
+    const auto bands = averageBands(1000.0);
+    const auto buckets = static_cast<float>(48000 / WaveformBuilder::kFramesPerBucket / 2);
+    CHECK_NEAR(bands.msMid / buckets, 0.125, 0.002); // 0.5 amplitude -> 0.25 / 2
+}
+
 TEST_CASE("Waveform of a full-scale sine spans -1 to +1")
 {
     WaveformBuilder builder;

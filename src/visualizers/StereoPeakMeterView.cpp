@@ -51,10 +51,11 @@ void StereoPeakMeterView::resized()
 StereoPeakMeterView::Layout StereoPeakMeterView::layout() const noexcept
 {
     Layout l;
-    auto area = getLocalBounds().toFloat().reduced(6.0f, 6.0f);
-    l.header = area.removeFromTop(18.0f);
-    l.footer = area.removeFromBottom(14.0f);
-    area.removeFromTop(4.0f);
+    const bool compact = isCompact();
+    auto area = getLocalBounds().toFloat().reduced(6.0f, compact ? 3.0f : 6.0f);
+    l.header = area.removeFromTop(getHeight() < 80 ? 0.0f : (compact ? 15.0f : 18.0f));
+    l.footer = area.removeFromBottom(compact ? 0.0f : 14.0f);
+    area.removeFromTop(compact ? 3.0f : 4.0f);
 
     const float barWidth = juce::jmin(16.0f, (area.getWidth() - 30.0f) / 2.0f);
     l.leftBar = area.withWidth(barWidth);
@@ -80,11 +81,25 @@ void StereoPeakMeterView::renderBackground(float pixelScale)
     g.fillRoundedRectangle(l.leftBar, 2.0f);
     g.fillRoundedRectangle(l.rightBar, 2.0f);
 
-    // Scale between the bars.
+    // Gaps between LED segments, every 3 px.
+    segmentGaps.clear();
+    for (const auto& bar : { l.leftBar, l.rightBar })
+        for (float y = bar.getBottom() - 3.0f; y > bar.getY(); y -= 3.0f)
+            segmentGaps.addWithoutMerging({ bar.getX(), y, bar.getWidth(), 1.0f });
+
+    // Scale between the bars (tick marks only when compact).
     g.setColour(theme::textDim);
     g.setFont(theme::font(9.5f));
     for (float db : { 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f, -60.0f })
     {
+        if (isCompact())
+        {
+            const float y = yForDb(db, l.leftBar);
+            g.setColour(theme::textDim.withAlpha(0.6f));
+            g.fillRect(juce::Rectangle<float>(l.scale.getCentreX() - 3.0f, y, 6.0f, 1.0f));
+            continue;
+        }
+
         const float y = yForDb(db, l.leftBar);
         g.drawText(juce::String((int) -db), juce::Rectangle<float>(l.scale.getX(), y - 6.0f, l.scale.getWidth(), 12.0f),
                    juce::Justification::centred, false);
@@ -109,7 +124,11 @@ void StereoPeakMeterView::drawChannel(juce::Graphics& g, juce::Rectangle<float> 
     const float peakY = yForDb(level.peakDb, bar);
     const float rmsY = yForDb(level.rmsDb, bar);
 
+    // Soft glow behind the lit part.
     g.setGradientFill(gradient);
+    g.setOpacity(0.16f);
+    g.fillRoundedRectangle(bar.withTop(peakY).expanded(3.0f, 2.0f), 4.0f);
+
     g.setOpacity(0.45f);
     g.fillRect(bar.withTop(peakY));
     g.setOpacity(1.0f);
@@ -133,6 +152,12 @@ void StereoPeakMeterView::paint(juce::Graphics& g)
     const auto l = layout();
     drawChannel(g, l.leftBar, levels[0]);
     drawChannel(g, l.rightBar, levels[1]);
+
+    g.setColour(theme::panel.withAlpha(0.75f));
+    g.fillRectList(segmentGaps);
+
+    if (l.header.isEmpty())
+        return;
 
     // Max peak readouts, red when the channel clipped.
     auto drawMax = [&](juce::Rectangle<float> box, const LevelReading& level)

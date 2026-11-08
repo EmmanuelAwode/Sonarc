@@ -35,6 +35,7 @@ private:
     };
 
     Layout layout() const noexcept;
+    bool isCompact() const noexcept { return getHeight() < 150; } // e.g. docked as a thin bar
     void renderBackground(float pixelScale);
     void drawChannel(juce::Graphics&, juce::Rectangle<float> bar, const LevelReading&) const;
     float yForDb(float db, juce::Rectangle<float> bar) const noexcept;
@@ -43,6 +44,7 @@ private:
 
     LevelReading levels[2];
     juce::Image background; // panel, tracks and scale, rendered once per size
+    juce::RectangleList<float> segmentGaps; // LED-style gaps drawn over the bars
     float backgroundScale = 0.0f;
 };
 

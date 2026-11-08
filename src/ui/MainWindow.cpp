@@ -4,6 +4,28 @@
 
 namespace sonarc {
 
+namespace {
+
+MainWindow::StickEdge edgeFromSetting(const juce::String& value)
+{
+    return value == "top" ? MainWindow::StickEdge::Top
+         : value == "bottom" ? MainWindow::StickEdge::Bottom
+                             : MainWindow::StickEdge::None;
+}
+
+const char* settingFromEdge(MainWindow::StickEdge edge)
+{
+    switch (edge)
+    {
+        case MainWindow::StickEdge::Top:    return "top";
+        case MainWindow::StickEdge::Bottom: return "bottom";
+        case MainWindow::StickEdge::None:   break;
+    }
+    return "off";
+}
+
+} // namespace
+
 MainWindow::MainWindow(AudioEngine& engine, AppSettings& appSettings)
     : DocumentWindow("Sonarc", theme::background, DocumentWindow::allButtons),
       settings(appSettings)
@@ -11,10 +33,11 @@ MainWindow::MainWindow(AudioEngine& engine, AppSettings& appSettings)
     setUsingNativeTitleBar(true);
     setContentOwned(new MainComponent(engine, settings), true);
     setResizable(true, false);
-    setResizeLimits(240, 90, 10000, 10000);
+    setResizeLimits(240, 48, 10000, 10000);
     centreWithSize(1100, 320);
 
     opacity = settings.windowOpacity(); // read before setOverlayMode() re-applies it
+    barHeight = settings.stickHeight();
     setOverlayMode(settings.overlayMode());
     setPinnedOnTop(settings.alwaysOnTop());
     setWindowOpacity(opacity);
@@ -25,6 +48,15 @@ MainWindow::MainWindow(AudioEngine& engine, AppSettings& appSettings)
 
     setVisible(true);
     getContentComponent()->grabKeyboardFocus();
+
+    setStickEdge(edgeFromSetting(settings.stickMode()));
+    startTimer(750);
+}
+
+MainWindow::~MainWindow()
+{
+    stopTimer();
+    appBar.undock(); // while our window still exists
 }
 
 void MainWindow::closeButtonPressed()
@@ -40,8 +72,21 @@ bool MainWindow::keyPressed(const juce::KeyPress& key)
     return DocumentWindow::keyPressed(key);
 }
 
+void MainWindow::notifyContent()
+{
+    if (auto* main = dynamic_cast<MainComponent*>(getContentComponent()))
+        main->windowStateChanged();
+}
+
 void MainWindow::setOverlayMode(bool shouldBeOverlay)
 {
+    // Leaving the frameless look while docked means leaving stick mode.
+    if (! shouldBeOverlay && isStuck())
+    {
+        setStickEdge(StickEdge::None);
+        return;
+    }
+
     if (shouldBeOverlay == overlayMode && isOnDesktop())
         return;
 
@@ -62,16 +107,93 @@ void MainWindow::setOverlayMode(bool shouldBeOverlay)
 
     // Re-apply: recreating the native window resets these.
     setWindowOpacity(opacity);
-    settings.setOverlayMode(overlayMode);
+    setAlwaysOnTop(pinned || isStuck());
+    if (! isStuck()) // stick mode forces overlay; remember the user's own choice
+        settings.setOverlayMode(overlayMode);
 }
 
 void MainWindow::setPinnedOnTop(bool shouldBeOnTop)
 {
-    setAlwaysOnTop(shouldBeOnTop);
-    settings.setAlwaysOnTop(shouldBeOnTop);
+    pinned = shouldBeOnTop;
+    setAlwaysOnTop(pinned || isStuck());
+    if (pinned && getPeer() != nullptr)
+        desktop::bringToTopmost(getPeer()->getNativeHandle());
+    settings.setAlwaysOnTop(pinned);
+    notifyContent();
+}
 
-    if (auto* main = dynamic_cast<MainComponent*>(getContentComponent()))
-        main->windowStateChanged();
+void MainWindow::setStickEdge(StickEdge edge)
+{
+    if (edge == stuckTo)
+        return;
+
+    appBar.undock();
+
+    if (edge == StickEdge::None)
+    {
+        stuckTo = StickEdge::None;
+        setResizable(true, false);
+        setOverlayMode(overlayBeforeStick);
+        if (! boundsBeforeStick.isEmpty())
+            setBounds(boundsBeforeStick);
+        setAlwaysOnTop(pinned);
+    }
+    else
+    {
+        if (! isStuck())
+        {
+            boundsBeforeStick = getBounds();
+            overlayBeforeStick = overlayMode;
+        }
+
+        stuckTo = edge;
+        setOverlayMode(true);     // may recreate the native window, so do it before docking
+        setResizable(false, false);
+        setAlwaysOnTop(true);
+        dock();
+    }
+
+    settings.setStickMode(settingFromEdge(stuckTo));
+    notifyContent();
+}
+
+void MainWindow::setStickHeight(int logicalPixels)
+{
+    barHeight = juce::jlimit(48, 400, logicalPixels);
+    settings.setStickHeight(barHeight);
+    if (isStuck())
+        dock();
+}
+
+void MainWindow::dock()
+{
+    auto* peer = getPeer();
+    if (peer == nullptr)
+        return;
+
+    const auto& displays = juce::Desktop::getInstance().getDisplays();
+    const auto* display = displays.getDisplayForRect(getScreenBounds());
+    const double scale = display != nullptr ? display->scale : 1.0;
+
+    appBar.dock(peer->getNativeHandle(),
+                stuckTo == StickEdge::Bottom ? desktop::AppBar::Edge::Bottom : desktop::AppBar::Edge::Top,
+                juce::roundToInt(barHeight * scale),
+                [this](int left, int top, int right, int bottom)
+                {
+                    const auto physical = juce::Rectangle<int>(left, top, right - left, bottom - top);
+                    setBounds(juce::Desktop::getInstance().getDisplays().physicalToLogical(physical));
+                });
+}
+
+void MainWindow::timerCallback()
+{
+    // Watchdog: if another app has covered us while pinned or docked, step back on top.
+    // Skipped while one of our own menus is open and while a fullscreen app owns the screen.
+    if (! (pinned || isStuck()) || appBar.isFullscreenAppActive() || juce::Component::getCurrentlyModalComponent() != nullptr)
+        return;
+
+    if (auto* peer = getPeer(); peer != nullptr && desktop::isCoveredByAnotherApp(peer->getNativeHandle()))
+        desktop::bringToTopmost(peer->getNativeHandle());
 }
 
 void MainWindow::setWindowOpacity(float newOpacity)
@@ -81,14 +203,21 @@ void MainWindow::setWindowOpacity(float newOpacity)
     settings.setWindowOpacity(opacity);
 }
 
+juce::String MainWindow::windowStateForSaving()
+{
+    return isStuck() && ! boundsBeforeStick.isEmpty() ? boundsBeforeStick.toString() : getWindowStateAsString();
+}
+
 void MainWindow::beginDrag(const juce::MouseEvent& e)
 {
-    dragger.startDraggingComponent(this, e.getEventRelativeTo(this));
+    if (! isStuck())
+        dragger.startDraggingComponent(this, e.getEventRelativeTo(this));
 }
 
 void MainWindow::continueDrag(const juce::MouseEvent& e)
 {
-    dragger.dragComponent(this, e.getEventRelativeTo(this), nullptr);
+    if (! isStuck())
+        dragger.dragComponent(this, e.getEventRelativeTo(this), nullptr);
 }
 
 } // namespace sonarc

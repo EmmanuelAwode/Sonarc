@@ -26,7 +26,7 @@ public:
     void shutdown() override
     {
         if (mainWindow != nullptr)
-            settings->setWindowState(mainWindow->getWindowStateAsString());
+            settings->setWindowState(mainWindow->windowStateForSaving());
 
         mainWindow.reset();
         engine.reset();
