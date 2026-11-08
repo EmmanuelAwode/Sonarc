@@ -16,6 +16,8 @@ namespace sonarc {
 //  - mean square per channel (for the RMS "core" of the waveform)
 //  - mean square of the mid signal's lows / mids / highs (for colouring the
 //    waveform by frequency content)
+//  - mean value per channel: an averaged (low-passed, decimated) copy of the
+//    signal itself, for the oscilloscope's continuous line
 struct WaveBucket
 {
     float minLeft = 0.0f, maxLeft = 0.0f;
@@ -23,6 +25,7 @@ struct WaveBucket
     float minMid = 0.0f, maxMid = 0.0f;
     float msLeft = 0.0f, msRight = 0.0f, msMid = 0.0f;
     float msLow = 0.0f, msMidBand = 0.0f, msHigh = 0.0f;
+    float meanLeft = 0.0f, meanRight = 0.0f, meanMid = 0.0f;
 };
 
 // Turns a stream of frames into WaveBuckets of kFramesPerBucket frames each.
@@ -82,6 +85,7 @@ public:
             {
                 current = { l, l, r, r, m, m };
                 sumL = sumR = sumM = sumLow = sumMidBand = sumHigh = 0.0f;
+                totalL = totalR = totalM = 0.0f;
             }
             else
             {
@@ -99,6 +103,9 @@ public:
             sumLow += lowBand * lowBand;
             sumMidBand += midBand * midBand;
             sumHigh += highBand * highBand;
+            totalL += l;
+            totalR += r;
+            totalM += m;
 
             if (++framesInCurrent == kFramesPerBucket)
             {
@@ -109,6 +116,9 @@ public:
                 current.msLow = sumLow * scale;
                 current.msMidBand = sumMidBand * scale;
                 current.msHigh = sumHigh * scale;
+                current.meanLeft = totalL * scale;
+                current.meanRight = totalR * scale;
+                current.meanMid = totalM * scale;
                 out[produced++] = current;
                 framesInCurrent = 0;
             }
@@ -121,6 +131,7 @@ private:
     WaveBucket current;
     std::size_t framesInCurrent = 0;
     float sumL = 0, sumR = 0, sumM = 0, sumLow = 0, sumMidBand = 0, sumHigh = 0;
+    float totalL = 0, totalR = 0, totalM = 0;
     float lowCoefficient = 1.0f, highCoefficient = 1.0f;
     float low1 = 0, low2 = 0, high1 = 0, high2 = 0;
 };

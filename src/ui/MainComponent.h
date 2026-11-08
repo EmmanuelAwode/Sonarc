@@ -1,11 +1,15 @@
 #pragma once
 
 #include "audio/AudioEngine.h"
+#include "presets/WaveformPresets.h"
 #include "settings/AppSettings.h"
 #include "ui/Theme.h"
+#include "ui/WaveformStyleEditor.h"
+#include "visualizers/KeyView.h"
 #include "visualizers/SpectrogramView.h"
 #include "visualizers/SpectrumView.h"
 #include "visualizers/StereoPeakMeterView.h"
+#include "visualizers/TempoView.h"
 #include "visualizers/WaveformView.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -16,13 +20,14 @@ namespace sonarc {
 
 class MainWindow;
 
-// A compact control strip, the spectrum and/or waveform, a stereo peak meter
 // A compact control strip, any combination of spectrum, waveform and
-// spectrogram, a stereo peak meter and a status line. Keys: H controls,
-// T pin on top, O overlay, S stick to screen edge, F freeze, V cycle view.
+// spectrogram, optional BPM and Key modules, a stereo peak meter and a status
+// line. Keys: H controls, T pin on top, O overlay, S stick to screen edge,
+// F freeze, V cycle view, W waveform style editor, B tap tempo, C colours.
 // Right-click for all options.
 class MainComponent final : public juce::Component,
-                            private juce::Timer
+                            private juce::Timer,
+                            private WaveformStyleEditor::Host
 {
 public:
     MainComponent(AudioEngine& audioEngine, AppSettings& appSettings);
@@ -56,6 +61,17 @@ private:
     void showColourPanel();
     void applyTheme(const theme::Colours&, const juce::String& presetName);
 
+    // Waveform presets and the style editor.
+    void showStyleEditor();
+    WaveformStyleEditor* styleEditor() const;
+    void applyWaveformStyle(const WaveformStyle&, const juce::String& presetName, bool fromEditor);
+    void waveformStyleChanged(const WaveformStyle&, const juce::String& presetName, bool modified) override;
+    void openColourEditor() override { showColourPanel(); }
+
+    // BPM / key modules.
+    void updateModules();
+    void setTempoRange(float minimumBpm);
+
     void refreshDeviceList();
     void refreshDeviceListIfChanged();
     void rebuildDeviceBox();
@@ -82,6 +98,16 @@ private:
     SpectrogramView spectrogramView;
     juce::TooltipWindow tooltips { this, 600 };
     juce::Component::SafePointer<juce::DialogWindow> colourDialog;
+    juce::Component::SafePointer<juce::DialogWindow> styleDialog;
+
+    WaveformPresetLibrary presetLibrary;
+    WaveformStyle waveformStyle;
+    juce::String waveformPresetName;
+
+    TempoView tempoView;
+    KeyView keyView;
+    bool showTempo = true, showKey = true;
+    float tempoRangeMinimum = 85.0f;
 
     std::vector<DeviceSelection> deviceChoices; // ComboBox item id N maps to deviceChoices[N - 1]
     std::vector<AudioDeviceInfo> knownDevices;

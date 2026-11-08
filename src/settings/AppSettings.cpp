@@ -28,6 +28,12 @@ namespace keys {
     static const juce::Identifier stickHeight { "stickHeight" };
     static const juce::Identifier theme { "theme" };
     static const juce::Identifier themePreset { "themePreset" };
+    static const juce::Identifier waveformPreset { "waveformPreset" };
+    static const juce::Identifier waveformCurrent { "waveformCurrentStyle" };
+    static const juce::Identifier showTempo { "showBpmModule" };
+    static const juce::Identifier showKey { "showKeyModule" };
+    static const juce::Identifier beatPulse { "beatPulse" };
+    static const juce::Identifier tempoRange { "bpmRangeMinimum" };
 }
 
 AppSettings::AppSettings(juce::File settingsFile) : file(std::move(settingsFile))
@@ -149,6 +155,26 @@ void AppSettings::setTheme(const juce::var& colours)
 
 juce::String AppSettings::themePreset() const { return get(keys::themePreset, "Sonarc").toString(); }
 void AppSettings::setThemePreset(const juce::String& name) { set(keys::themePreset, name); }
+
+juce::String AppSettings::waveformPresetName() const { return get(keys::waveformPreset, "").toString(); }
+void AppSettings::setWaveformPresetName(const juce::String& name) { set(keys::waveformPreset, name); }
+
+juce::var AppSettings::waveformCurrentStyle() const { return get(keys::waveformCurrent, {}); }
+
+void AppSettings::setWaveformCurrentStyle(const juce::var& style)
+{
+    root->setProperty(keys::waveformCurrent, style); // objects compare by reference, so always mark dirty
+    dirty = true;
+}
+
+bool AppSettings::showTempoModule() const { return get(keys::showTempo, true); }
+void AppSettings::setShowTempoModule(bool show) { set(keys::showTempo, show); }
+bool AppSettings::showKeyModule() const { return get(keys::showKey, true); }
+void AppSettings::setShowKeyModule(bool show) { set(keys::showKey, show); }
+bool AppSettings::beatPulse() const { return get(keys::beatPulse, true); }
+void AppSettings::setBeatPulse(bool enabled) { set(keys::beatPulse, enabled); }
+float AppSettings::tempoRangeMinimum() const { return (float) (double) get(keys::tempoRange, 85.0); }
+void AppSettings::setTempoRangeMinimum(float bpm) { set(keys::tempoRange, bpm); }
 
 juce::String AppSettings::windowState() const { return get(keys::windowState, "").toString(); }
 void AppSettings::setWindowState(const juce::String& state) { set(keys::windowState, state); }

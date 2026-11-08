@@ -79,6 +79,30 @@ bool AudioEngine::service()
                 restart = true;
     }
 
+    // Per-app capture follows the app by name. Apps like browsers run several
+    // processes; if the one we captured is silent while another instance of the
+    // same app is playing, move to that one (checked every few seconds).
+    const auto now = std::chrono::steady_clock::now();
+    if (currentSelection.kind == DeviceKind::Application && current.state == CaptureState::Running && now >= nextAppCheck)
+    {
+        nextAppCheck = now + 3s;
+
+        bool capturedSilent;
+        {
+            std::lock_guard lock(snapshotLock);
+            capturedSilent = published.left.peakDb < -80.0f && published.right.peakDb < -80.0f;
+        }
+
+        if (capturedSilent)
+            for (const auto& device : backend->enumerateDevices())
+                if (device.kind == DeviceKind::Application && device.processName == currentSelection.processName
+                    && device.isPlaying && std::to_wstring(device.processId) != current.deviceId)
+                {
+                    currentSelection.processId = device.processId;
+                    restart = true;
+                }
+    }
+
     if (restart)
         restartStream();
 
@@ -125,6 +149,9 @@ void AudioEngine::analysisLoop()
     WaveformBuilder waveform;
     SpectrogramAnalyzer spectrogram;
     bool spectrogramRunning = false;
+    TempoAnalyzer tempo;
+    KeyDetector key;
+    bool tempoRunning = false, keyRunning = false;
     std::vector<StereoFrame> block(4096);
     std::vector<WaveBucket> buckets(WaveformBuilder::maxBucketsFor(block.size()));
 
@@ -156,6 +183,8 @@ void AudioEngine::analysisLoop()
                 spectrum.prepare(sampleRate, fftSize);
                 meter.prepare(sampleRate);
                 spectrogram.prepare(sampleRate, spectrogramFftSize);
+                tempo.prepare(sampleRate); // a new stream (device change / reconnect) starts from scratch
+                key.prepare(sampleRate);
             }
         }
 
@@ -171,6 +200,16 @@ void AudioEngine::analysisLoop()
         else if (wantSpectrogram && ! spectrogramRunning)
             spectrogram.reset(); // don't show audio from before it was switched off
         spectrogramRunning = wantSpectrogram;
+
+        // Switched back on: don't mix in audio from before it was off.
+        const bool wantTempo = tempoEnabled, wantKey = keyEnabled;
+        if (wantTempo && ! tempoRunning)
+            tempo.reset();
+        if (wantKey && ! keyRunning)
+            key.reset();
+        tempoRunning = wantTempo;
+        keyRunning = wantKey;
+        tempo.setFoldRange(tempoFoldMinimum);
 
         spectrum.setBallistics({ spectrumSmoothing, spectrumDecay, peakHoldSeconds, 15.0f });
 
@@ -189,6 +228,10 @@ void AudioEngine::analysisLoop()
             waveformRing.push(buckets.data(), waveform.process(block.data(), n, buckets.data()));
             if (spectrogramRunning)
                 spectrogram.process(block.data(), n, [this](const SpectrogramRow& row) { spectrogramRing.push(&row, 1); });
+            if (tempoRunning)
+                tempo.process(block.data(), n);
+            if (keyRunning)
+                key.process(block.data(), n);
             framesRead += n;
         }
 
@@ -205,6 +248,12 @@ void AudioEngine::analysisLoop()
         working.left = meter.left();
         working.right = meter.right();
         working.droppedFrames = droppedFrames.load(std::memory_order_relaxed);
+
+        const auto& t = tempo.latest();
+        working.tempo = tempoRunning ? TempoReading { t.valid, t.bpm, t.confidence, t.beatPhase } : TempoReading {};
+        const auto& k = key.latest();
+        working.key = keyRunning ? KeyReading { k.valid, k.key, k.confidence } : KeyReading {};
+        working.analysisTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
         std::lock_guard lock(snapshotLock);
         std::swap(published, working);

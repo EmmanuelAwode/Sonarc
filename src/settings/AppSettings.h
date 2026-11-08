@@ -82,6 +82,22 @@ public:
     juce::String themePreset() const; // preset name, or "Custom"
     void setThemePreset(const juce::String& name);
 
+    // Waveform: the selected preset, and the current (possibly edited) style.
+    juce::String waveformPresetName() const;
+    void setWaveformPresetName(const juce::String& name);
+    juce::var waveformCurrentStyle() const;
+    void setWaveformCurrentStyle(const juce::var& style);
+
+    // BPM / key modules.
+    bool showTempoModule() const;
+    void setShowTempoModule(bool show);
+    bool showKeyModule() const;
+    void setShowKeyModule(bool show);
+    bool beatPulse() const;
+    void setBeatPulse(bool enabled);
+    float tempoRangeMinimum() const; // detected tempos fold into [min, 2 * min)
+    void setTempoRangeMinimum(float bpm);
+
     juce::String windowState() const;
     void setWindowState(const juce::String& state);
 

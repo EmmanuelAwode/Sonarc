@@ -6,10 +6,12 @@ add_library(sonarc_core STATIC
     audio/AudioEngine.cpp
     audio/WasapiCaptureBackend.cpp
     dsp/Fft.cpp
+    dsp/KeyDetector.cpp
     dsp/LevelMeter.cpp
     dsp/MagnitudeSpectrum.cpp
     dsp/SpectrogramAnalyzer.cpp
-    dsp/SpectrumAnalyzer.cpp)
+    dsp/SpectrumAnalyzer.cpp
+    dsp/TempoAnalyzer.cpp)
 
 target_include_directories(sonarc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sonarc_core PUBLIC ole32 avrt mmdevapi version)
@@ -28,16 +30,20 @@ juce_add_gui_app(Sonarc
 
 target_sources(Sonarc PRIVATE
     app/Main.cpp
+    presets/WaveformPresets.cpp
     settings/AppSettings.cpp
     ui/ColourSettingsPanel.cpp
     ui/MainComponent.cpp
     ui/MainWindow.cpp
+    ui/WaveformStyleEditor.cpp
     ui/WindowsDesktop.cpp
     ui/SonarcLookAndFeel.cpp
     ui/Theme.cpp
+    visualizers/KeyView.cpp
     visualizers/SpectrogramView.cpp
     visualizers/SpectrumView.cpp
     visualizers/StereoPeakMeterView.cpp
+    visualizers/TempoView.cpp
     visualizers/WaveformView.cpp)
 
 target_compile_definitions(Sonarc PRIVATE

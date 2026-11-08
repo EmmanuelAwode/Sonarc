@@ -2,6 +2,8 @@
 
 #include "audio/CaptureBackend.h"
 #include "dsp/AnalysisSnapshot.h"
+#include "dsp/KeyDetector.h"
+#include "dsp/TempoAnalyzer.h"
 #include "dsp/SpectrogramAnalyzer.h"
 #include "dsp/WaveformBuilder.h"
 #include "util/SpscRingBuffer.h"
@@ -66,6 +68,12 @@ public:
     // computed while enabled, so a hidden spectrogram costs nothing.
     void setSpectrogramEnabled(bool enabled) noexcept { spectrogramEnabled = enabled; }
     void setSpectrogramFftSize(int size) noexcept;
+
+    // BPM and key detection run on the analysis thread only while enabled
+    // (i.e. while their modules are shown).
+    void setTempoEnabled(bool enabled) noexcept { tempoEnabled = enabled; }
+    void setKeyEnabled(bool enabled) noexcept { keyEnabled = enabled; }
+    void setTempoFoldRange(float minimumBpm) noexcept { tempoFoldMinimum = minimumBpm; }
     std::size_t readSpectrogram(SpectrogramRow* destination, std::size_t maxCount) noexcept
     {
         return spectrogramRing.pop(destination, maxCount);
@@ -81,6 +89,7 @@ private:
     bool isOpen = false;
     bool autoReconnect = true;
     std::chrono::steady_clock::time_point nextReconnectAttempt;
+    std::chrono::steady_clock::time_point nextAppCheck;
     std::atomic<bool> devicesChanged { false };
 
     // capture -> analysis
@@ -99,6 +108,9 @@ private:
     std::atomic<bool> resetPeaksRequested { false };
     std::atomic<bool> spectrogramEnabled { false };
     std::atomic<int> spectrogramFftSize { 2048 };
+    std::atomic<bool> tempoEnabled { false };
+    std::atomic<bool> keyEnabled { false };
+    std::atomic<float> tempoFoldMinimum { 85.0f };
 
     // analysis -> UI
     std::mutex snapshotLock;

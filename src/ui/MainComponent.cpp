@@ -48,16 +48,6 @@ constexpr PaletteInfo kPalettes[] = {
     { "grayscale", "Grayscale",                    SpectrogramView::Palette::Grayscale },
 };
 
-const char* stereoModeKey(WaveformView::StereoMode mode)
-{
-    switch (mode)
-    {
-        case WaveformView::StereoMode::Overlaid: return "overlaid";
-        case WaveformView::StereoMode::Mid:      return "mid";
-        case WaveformView::StereoMode::Stacked:  break;
-    }
-    return "stacked";
-}
 
 juce::String encodingName(const StreamFormat& format)
 {
@@ -169,16 +159,50 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     viewBox.onChange = [this] { setViewMode((ViewMode) (viewBox.getSelectedId() - 1)); };
     addAndMakeVisible(viewBox);
 
-    // Waveform
-    const auto stereo = settings.waveformStereoMode();
-    waveformView.setStereoMode(stereo == "overlaid" ? WaveformView::StereoMode::Overlaid
-                             : stereo == "mid"      ? WaveformView::StereoMode::Mid
-                                                    : WaveformView::StereoMode::Stacked);
-    waveformView.setStyle(settings.waveformStyle() == "classic" ? WaveformView::Style::Classic : WaveformView::Style::Spectral);
-    waveformView.setWindowSeconds(settings.waveformWindowSeconds());
-    waveformView.setThickness(settings.waveformThickness());
-    waveformView.onWindowChanged = [this](float seconds) { settings.setWaveformWindowSeconds(seconds); };
+    // Waveform: the selected preset and the current (possibly edited) style.
+    {
+        WaveformStyle current;
+        juce::String presetName = settings.waveformPresetName();
+        juce::String error;
+        if (waveformPresets::styleFromVar(settings.waveformCurrentStyle(), current, error))
+        {
+            // Restored exactly as it was left (including unsaved edits).
+        }
+        else if (const auto* named = presetLibrary.find(presetName))
+        {
+            current = named->style;
+        }
+        else
+        {
+            // First run with presets: carry over the earlier waveform settings.
+            const bool classic = settings.waveformStyle() == "classic";
+            const auto* base = presetLibrary.find(classic ? "Classic" : waveformPresets::defaultPreset().name);
+            presetName = base->name;
+            current = base->style;
+            const auto stereo = settings.waveformStereoMode();
+            current.stereoSeparation = stereo == "mid" ? 0.0f : stereo == "overlaid" ? 0.15f : 1.0f;
+            current.windowSeconds = juce::jlimit(WaveformStyle::windowRange.min, WaveformStyle::windowRange.max, settings.waveformWindowSeconds());
+            current.lineThickness = juce::jlimit(WaveformStyle::lineThicknessRange.min, WaveformStyle::lineThicknessRange.max, settings.waveformThickness());
+        }
+        if (presetLibrary.find(presetName) == nullptr)
+            presetName = waveformPresets::defaultPreset().name;
+        applyWaveformStyle(current, presetName, false);
+    }
+    waveformView.onWindowChanged = [this](float) { applyWaveformStyle(waveformView.style(), waveformPresetName, false); };
     addChildComponent(waveformView);
+
+    // BPM and key modules
+    showTempo = settings.showTempoModule();
+    showKey = settings.showKeyModule();
+    tempoRangeMinimum = settings.tempoRangeMinimum();
+    engine.setTempoFoldRange(tempoRangeMinimum);
+    tempoView.setBeatPulse(settings.beatPulse());
+    tempoView.onRangeShift = [this](float factor) { setTempoRange(tempoRangeMinimum * factor); };
+    tempoView.onContextMenu = [this] { showContextMenu(); };
+    keyView.onContextMenu = [this] { showContextMenu(); };
+    addChildComponent(tempoView);
+    addChildComponent(keyView);
+    updateModules();
 
     // Spectrogram
     spectrogramView.setSpeed(settings.spectrogramSpeed());
@@ -387,6 +411,8 @@ void MainComponent::updateStatus()
         meterView.clearLevels();
         waveformView.clear();
         spectrogramView.clear();
+        tempoView.clearReading();
+        keyView.clearReading();
     }
     lastState = status.state;
 }
@@ -418,7 +444,13 @@ void MainComponent::onVBlank()
     {
         spectrumView.setSpectrum(snapshot);
         meterView.setLevels(snapshot.left, snapshot.right);
+        if (showTempo)
+            tempoView.setReading(snapshot.tempo, snapshot.analysisTimeMs);
+        if (showKey)
+            keyView.setReading(snapshot.key);
     }
+    if (showTempo)
+        tempoView.tick(); // beat pulse
 
     drainWaveform();
 }
@@ -426,9 +458,14 @@ void MainComponent::onVBlank()
 void MainComponent::drainWaveform()
 {
     waveformView.setSampleRate(snapshot.sampleRate);
+    auto* editor = styleEditor();
     while (const auto n = engine.readWaveform(waveformScratch.data(), waveformScratch.size()))
+    {
         if (! frozen)
             waveformView.append(waveformScratch.data(), n);
+        if (editor != nullptr)
+            editor->feedLive(waveformScratch.data(), n, snapshot.sampleRate);
+    }
 
     if (snapshot.sampleRate > 0)
         spectrogramView.setRowRate((double) snapshot.sampleRate / (double) SpectrogramAnalyzer::kHopFrames);
@@ -491,6 +528,12 @@ void MainComponent::applyTheme(const theme::Colours& colours, const juce::String
     waveformView.themeChanged();
     spectrogramView.themeChanged();
     meterView.themeChanged();
+    tempoView.themeChanged();
+    keyView.themeChanged();
+    if (auto* editor = styleEditor())
+        editor->themeChanged();
+    if (styleDialog != nullptr)
+        styleDialog->setBackgroundColour(theme::background);
 
     if (auto* w = window())
     {
@@ -501,6 +544,75 @@ void MainComponent::applyTheme(const theme::Colours& colours, const juce::String
         colourDialog->setBackgroundColour(theme::background);
     updateStatus();
     repaint();
+}
+
+WaveformStyleEditor* MainComponent::styleEditor() const
+{
+    return styleDialog != nullptr ? dynamic_cast<WaveformStyleEditor*>(styleDialog->getContentComponent()) : nullptr;
+}
+
+void MainComponent::showStyleEditor()
+{
+    if (styleDialog != nullptr)
+    {
+        styleDialog->toFront(true);
+        return;
+    }
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(new WaveformStyleEditor(presetLibrary, *this, waveformStyle, waveformPresetName));
+    options.dialogTitle = "Sonarc - Waveform Style Editor";
+    options.dialogBackgroundColour = theme::background;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    options.componentToCentreAround = this;
+
+    styleDialog = options.launchAsync();
+    if (styleDialog != nullptr)
+    {
+        styleDialog->setAlwaysOnTop(true); // Sonarc is often pinned on top
+        styleDialog->toFront(true);
+    }
+}
+
+void MainComponent::applyWaveformStyle(const WaveformStyle& style, const juce::String& presetName, bool fromEditor)
+{
+    waveformStyle = style;
+    waveformPresetName = presetName;
+    waveformView.setStyle(style); // switching never touches audio capture
+    settings.setWaveformPresetName(presetName);
+    settings.setWaveformCurrentStyle(waveformPresets::styleToVar(style));
+
+    if (! fromEditor)
+        if (auto* editor = styleEditor())
+            editor->externalChange(style, presetName);
+}
+
+void MainComponent::waveformStyleChanged(const WaveformStyle& style, const juce::String& presetName, bool)
+{
+    applyWaveformStyle(style, presetName, true);
+}
+
+void MainComponent::updateModules()
+{
+    // Detection only runs while its module is shown.
+    engine.setTempoEnabled(showTempo);
+    engine.setKeyEnabled(showKey);
+    settings.setShowTempoModule(showTempo);
+    settings.setShowKeyModule(showKey);
+    if (! showTempo)
+        tempoView.clearReading();
+    if (! showKey)
+        keyView.clearReading();
+    resized();
+}
+
+void MainComponent::setTempoRange(float minimumBpm)
+{
+    tempoRangeMinimum = juce::jlimit(40.0f, 160.0f, minimumBpm);
+    engine.setTempoFoldRange(tempoRangeMinimum);
+    settings.setTempoRangeMinimum(tempoRangeMinimum);
 }
 
 void MainComponent::setFrozen(bool shouldFreeze)
@@ -605,42 +717,50 @@ void MainComponent::showContextMenu()
                           });
 
     juce::PopupMenu waveMenu;
-    waveMenu.addItem("Style: Spectral (coloured by frequency)", true, waveformView.style() == WaveformView::Style::Spectral, [this]
-                     {
-                         waveformView.setStyle(WaveformView::Style::Spectral);
-                         settings.setWaveformStyle("spectral");
-                     });
-    waveMenu.addItem("Style: Classic", true, waveformView.style() == WaveformView::Style::Classic, [this]
-                     {
-                         waveformView.setStyle(WaveformView::Style::Classic);
-                         settings.setWaveformStyle("classic");
-                     });
-    waveMenu.addSeparator();
-    for (float seconds : { 0.05f, 0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f })
-        waveMenu.addItem(seconds < 1.0f ? juce::String(juce::roundToInt(seconds * 1000.0f)) + " ms" : juce::String(seconds, 0) + " s",
-                         true, std::abs(waveformView.windowSeconds() - seconds) < 0.001f, [this, seconds]
-                         {
-                             waveformView.setWindowSeconds(seconds);
-                             settings.setWaveformWindowSeconds(seconds);
-                         });
-    waveMenu.addSeparator();
-    for (auto [label, mode] : { std::pair { "Stacked L / R", WaveformView::StereoMode::Stacked },
-                                std::pair { "Overlaid L + R", WaveformView::StereoMode::Overlaid },
-                                std::pair { "Mono (mid)", WaveformView::StereoMode::Mid } })
-        waveMenu.addItem(label, true, waveformView.stereoMode() == mode, [this, mode]
-                         {
-                             waveformView.setStereoMode(mode);
-                             settings.setWaveformStereoMode(stereoModeKey(mode));
-                         });
-    waveMenu.addSeparator();
-    juce::PopupMenu thicknessMenu;
-    for (float px : { 1.0f, 1.5f, 2.0f, 3.0f, 4.0f })
-        thicknessMenu.addItem(juce::String(px, 1) + " px", true, std::abs(waveformView.thickness() - px) < 0.01f, [this, px]
-                              {
-                                  waveformView.setThickness(px);
-                                  settings.setWaveformThickness(px);
-                              });
-    waveMenu.addSubMenu("Minimum thickness", thicknessMenu);
+    {
+        const auto all = presetLibrary.all();
+        auto addPreset = [&](const WaveformPreset& p)
+        {
+            waveMenu.addItem((p.favourite ? "* " : "") + p.name, true, p.name == waveformPresetName,
+                             [this, name = p.name, style = p.style] { applyWaveformStyle(style, name, false); });
+        };
+        bool anyFavourite = false;
+        for (const auto& p : all)
+            anyFavourite = anyFavourite || p.favourite;
+        if (anyFavourite)
+        {
+            waveMenu.addSectionHeader("Favourites");
+            for (const auto& p : all)
+                if (p.favourite)
+                    addPreset(p);
+        }
+        waveMenu.addSectionHeader("Presets");
+        for (const auto& p : all)
+            if (! p.favourite)
+                addPreset(p);
+        waveMenu.addSeparator();
+        waveMenu.addItem("Waveform Style Editor...\tW", [this] { showStyleEditor(); });
+        waveMenu.addItem("Restore default waveform", [this]
+        {
+            const auto& d = waveformPresets::defaultPreset();
+            applyWaveformStyle(d.style, d.name, false);
+        });
+    }
+
+    juce::PopupMenu modulesMenu;
+    modulesMenu.addItem("BPM", true, showTempo, [this] { showTempo = ! showTempo; updateModules(); });
+    modulesMenu.addItem("Key", true, showKey, [this] { showKey = ! showKey; updateModules(); });
+    modulesMenu.addItem("Beat pulse animation", showTempo, settings.beatPulse(), [this]
+    {
+        settings.setBeatPulse(! settings.beatPulse());
+        tempoView.setBeatPulse(settings.beatPulse());
+    });
+    modulesMenu.addSeparator();
+    modulesMenu.addSectionHeader("BPM range (half / double time)");
+    for (float minimum : { 60.0f, 70.0f, 85.0f, 100.0f })
+        modulesMenu.addItem(juce::String(juce::roundToInt(minimum)) + " - " + juce::String(juce::roundToInt(minimum * 2.0f)) + " BPM",
+                            showTempo, std::abs(tempoRangeMinimum - minimum) < 0.5f, [this, minimum] { setTempoRange(minimum); });
+    modulesMenu.addItem("Tap tempo\tB", showTempo, false, [this] { tempoView.tap(); });
 
     juce::PopupMenu themeMenu;
     for (const auto& preset : theme::presets())
@@ -653,6 +773,7 @@ void MainComponent::showContextMenu()
     menu.addSubMenu("View", viewMenu);
     menu.addSubMenu("Waveform", waveMenu);
     menu.addSubMenu("Spectrogram", sgramMenu);
+    menu.addSubMenu("Modules (BPM / Key)", modulesMenu);
     menu.addSubMenu("Theme", themeMenu);
     menu.addItem("Colours & theme...\tC", [this] { showColourPanel(); });
     menu.addItem("Freeze display\tF", true, frozen, [this] { setFrozen(! frozen); });
@@ -724,6 +845,16 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     if (c == 'f')
     {
         setFrozen(! frozen);
+        return true;
+    }
+    if (c == 'w')
+    {
+        showStyleEditor();
+        return true;
+    }
+    if (c == 'b' && showTempo)
+    {
+        tempoView.tap();
         return true;
     }
     if (c == 'v')
@@ -810,6 +941,22 @@ void MainComponent::resized()
     bounds.reduce(margin, controlsVisible ? 0 : margin);
     meterView.setBounds(bounds.removeFromRight(juce::jmin(StereoPeakMeterView::preferredWidth, bounds.getWidth() / 3)));
     bounds.removeFromRight(margin);
+
+    // [panes] [BPM] [Key] [meters]
+    keyView.setVisible(showKey);
+    tempoView.setVisible(showTempo);
+    tempoView.setCleanMode(! controlsVisible);
+    keyView.setCleanMode(! controlsVisible);
+    if (showKey)
+    {
+        keyView.setBounds(bounds.removeFromRight(KeyView::preferredWidth));
+        bounds.removeFromRight(margin);
+    }
+    if (showTempo)
+    {
+        tempoView.setBounds(bounds.removeFromRight(TempoView::preferredWidth));
+        bounds.removeFromRight(margin);
+    }
 
     // Visible panes in display order (left to right, or top to bottom) with relative sizes.
     const auto& info = viewInfo(viewMode);

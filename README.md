@@ -138,12 +138,26 @@ Play music. With **System default output** selected, the spectrum and meters fol
 - **Meter:** solid bar = RMS (300 ms), lighter bar = sample peak, top boxes = max peak since reset (red = a sample reached 0 dBFS). **Click the meter** to reset.
 - **H:** hide or show the controls for a clean view.
 - **View (V):** *Spectrum*, *Waveform*, *Spectrogram*, or the combinations *Spectrum + Wave*, *Spectrum + Spectrogram* and all three. Panes sit side by side in a wide window and stack in a tall one.
-- **Waveform:** a scrolling view of the real signal, with newest audio at the right.
-  - **Spectral style (default):** colour shows what's sounding: bass is pink-red, mids amber and highs cyan (split at 250 Hz and 2.5 kHz). It is drawn mirrored, with a solid RMS core inside a softer peak body and a glow. Heights use a square-root scale so a mix fills the lane. **Classic style** is a plain, linear min/max trace per channel.
-  - Every pixel shows the true min/max of the samples it covers, so short peaks never disappear when zoomed out.
-  - **Mouse wheel** zooms from 20 ms (individual cycles) to 10 s.
-  - Right-click → *Waveform* for presets, **Stacked L/R**, **Overlaid L+R** or **Mono (mid)**, and minimum line thickness.
-  - Red marks at a lane's edge show samples at or beyond 0 dBFS.
+- **Waveform:** the real signal, drawn in one of six styles: **Classic** (per-channel min/max trace), **Mirrored** (symmetric, an RMS core inside the peak body), **Oscilloscope** (a continuous line, triggered on rising zero crossings so steady tones stand still), **Vertical bars**, **Filled**, and **Circular** (time wrapped around a ring that breathes with the level).
+  - Every pixel uses the true min/max of the samples it covers, so peaks never disappear. The mouse wheel zooms the time window (20 ms to 10 s).
+  - Colours always come from your colour theme. A style only picks *which* theme colours to use: spectral bands (bass/mid/high), channel colours, the spectrum gradient, or the accent.
+- **Waveform Style Editor (W, or right-click → Waveform → Waveform Style Editor...):**
+  - **Settings per style:** line thickness, glow, amplitude, smoothing, time shown (scroll speed), animation speed, stereo separation, peak hold, fill opacity, bar count and direction. Only the settings the chosen style uses are shown, and each has its own *Reset*. *Reset style* undoes all unsaved changes.
+  - **Live preview:** uses the real audio. When nothing is playing it switches to a clearly labelled **TEST SIGNAL (simulated)**, and you can also choose live-only or test-only.
+  - **Presets:** built-ins *Spectral Mirror* (the default, and what *Restore default* returns to), *Classic*, *Neon Oscilloscope*, *Minimal*, *Bass Pulse*, *Retro Bars* and *Circular Glow*. Manage them with **Save**, **Save As**, **Rename**, **Duplicate**, **Delete** and **Favourite** (favourites appear first, in the editor and in right-click → *Waveform*). Built-ins can't be changed or deleted; use *Save As* to keep your version.
+  - **Import / Export** shares presets as JSON (`"format": "sonarc-waveform-preset", "version": 1`). Imports are validated: unknown shapes, wrong types, out-of-range values and files from a newer format version are rejected with a reason, and a bad preset doesn't stop the good ones in the same file.
+  - **Storage:** your presets live in `%APPDATA%\Sonarc\waveform-presets.json`, separate from settings and colours. The selected preset and any unsaved edits are restored at launch, and switching presets never interrupts audio capture.
+- **BPM module:**
+  - **Detection:** finds the tempo of what's playing (spectral-flux onsets, autocorrelation over the last 8 s, comb and half-period scoring), smoothed so it doesn't flicker. A new tempo has to hold for about 3 s before it's shown.
+  - **Readings:** the bar under the number shows confidence (periodicity strength and stability). It shows **"--"** when there's no reliable tempo, including silence and noise.
+  - **Half and double time:** tempos are folded into a range (default 85–170 BPM). **1/2** and **x2** switch, for example, 70 ↔ 140, and right-click → *Modules* → *BPM range* sets the range.
+  - **TAP / B:** three taps set and lock a tapped tempo. **LOCK** holds the current value.
+  - **Beat pulse:** an optional dot that flashes in time with the detected beat.
+- **Key module:**
+  - **Detection:** finds the key (all 24 major and minor keys) from a chroma of spectral peaks (110 Hz–4 kHz), correlated with the Krumhansl-Kessler key profiles. It has about 20 s of memory and hysteresis, so a new key must lead for about 4 s.
+  - **Readings:** shows the key name, its **Camelot** code (e.g. `11A` for F# minor) in a colour-coded pill, and a confidence bar. **LOCK** holds it.
+  - **Gating:** silent, noisy or drum-only passages don't count as evidence, so the module shows **"--"** until there's enough tonal music (about 3 s).
+- **Modules (right-click → Modules):** show or hide BPM and Key. Each detector only runs while its module is visible. The layout is *[visualisers] [BPM] [Key] [meters]*, and it fits the stick bar.
 - **Spectrum readout:** the top-left of the spectrum shows the loudest peak's level, frequency and nearest musical note with cents (e.g. `-12.6 dB  87.1 Hz  F2 -3c`). It updates 8 times a second.
 - **Clean look:** with the controls hidden (overlay, stick or H), the visualisers drop their axis labels and info text for a stream-ready picture.
 - **Spectrogram:** a scrolling history of the spectrum. Time runs left to right with the newest at the right edge, frequency runs from 20 Hz at the bottom to 20 kHz at the top on a log scale, and colour shows level.
@@ -177,6 +191,10 @@ Settings and the window position are saved to `%APPDATA%\Sonarc\settings.json`.
 
 ## Measurement notes and limitations (read these)
 
+- **BPM:** it's accurate to within about ±1 BPM on steady, beat-driven music. That's measured in tests from 80 to 175 BPM, and as 124.4 on a 124 BPM track in the app. Music with free tempo (rubato), live drift, sparse or highly syncopated rhythms can read low-confidence or "--". Half and double time is inherently ambiguous, which is what the range setting and the 1/2 / x2 buttons are for.
+- **Key:** it estimates the overall key from the last ~20 s, so short modulations, modal or atonal music, and the relative major/minor pair (e.g. C major vs A minor, which share every note) are the usual sources of disagreement with a human. It doesn't analyse chords.
+- **Loopback:** BPM and key analyse whatever the selected source plays. With *System default output* that is *every* app mixed together, so use *Applications* to analyse just one player.
+
 - **Spectrum calibration:** a full-scale sine centred on an FFT bin reads **0 dBFS**. The window is Hann, so a sine between bins can read up to **1.42 dB low** (scalloping). The spectrum shows the mid signal (L+R)/2, so a sine in only one channel reads 6 dB lower.
 - **Peak meter = sample peak**, not true peak. Inter-sample (true) peak per ITU-R BS.1770 needs oversampling and comes with the loudness module in Phase 2. Nothing is labeled LUFS or dBTP yet.
 - **RMS** uses an exponential 300 ms time constant. A full-scale sine reads −3.01 dBFS (no +3 dB "AES" offset).
@@ -188,7 +206,7 @@ Settings and the window position are saved to `%APPDATA%\Sonarc\settings.json`.
 
 ## Roadmap
 
-- **Phase 2:** goniometer/correlation, loudness (BS.1770 / R128) (waveform and spectrogram are done)
+- **Phase 2:** goniometer/correlation, loudness (BS.1770 / R128) (waveform styles, spectrogram, BPM and key detection are done)
 - **Phase 3:** modular, rearrangeable meters, layouts, themes, presets
 - **Phase 4:** per-pixel transparent background, FPS setting (always-on-top, stick/dock mode, borderless overlay, clean stream look and window opacity are done)
 - **Phase 5:** profiling, more reconnection hardening, installer, portable build
