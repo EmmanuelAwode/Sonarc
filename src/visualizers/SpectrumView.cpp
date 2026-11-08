@@ -39,6 +39,12 @@ void SpectrumView::setSpectrum(const AnalysisSnapshot& snapshot)
     repaint();
 }
 
+void SpectrumView::themeChanged()
+{
+    background = {};
+    repaint();
+}
+
 void SpectrumView::setCleanMode(bool clean)
 {
     if (clean == cleanMode)
@@ -91,15 +97,14 @@ void SpectrumView::updatePeakReadout()
 // and mint to gold and coral highs.
 juce::ColourGradient SpectrumView::frequencyGradient(float alpha, float brighten) const
 {
-    struct Stop { float hz; juce::uint32 argb; };
-    static constexpr Stop stops[] = { { 20.0f, 0xff6b4bff }, { 90.0f, 0xff2f7bff }, { 400.0f, 0xff22d3ee },
-                                      { 2000.0f, 0xff3ee6a8 }, { 6000.0f, 0xffffd166 }, { 20000.0f, 0xffff7a59 } };
+    const auto& stops = theme::spectrumStops;
+    const auto& stopHz = theme::kSpectrumStopHz;
+    auto colourOf = [&](size_t i) { return stops[i].brighter(brighten).withMultipliedAlpha(alpha); };
 
-    auto colourOf = [&](const Stop& s) { return juce::Colour(s.argb).brighter(brighten).withAlpha(alpha); };
     const float x0 = xForFrequency(minHz), x1 = xForFrequency(maxHz);
-    juce::ColourGradient gradient(colourOf(stops[0]), x0, 0.0f, colourOf(stops[std::size(stops) - 1]), x1, 0.0f, false);
-    for (size_t i = 1; i + 1 < std::size(stops); ++i)
-        gradient.addColour(std::log(stops[i].hz / minHz) / std::log(maxHz / minHz), colourOf(stops[i]));
+    juce::ColourGradient gradient(colourOf(0), x0, 0.0f, colourOf(stops.size() - 1), x1, 0.0f, false);
+    for (size_t i = 1; i + 1 < stops.size(); ++i)
+        gradient.addColour(std::log(stopHz[i] / minHz) / std::log(maxHz / minHz), colourOf(i));
     return gradient;
 }
 
@@ -320,17 +325,20 @@ void SpectrumView::paint(juce::Graphics& g)
     fillPath.closeSubPath();
 
     // Fill: frequency-coloured, fading into the floor.
-    g.setGradientFill(frequencyGradient(0.55f));
+    g.setGradientFill(frequencyGradient(theme::spectrumFill));
     g.fillPath(fillPath);
     g.setGradientFill(juce::ColourGradient(theme::panel.withAlpha(0.0f), 0.0f, area.getY(),
                                            theme::panel.withAlpha(0.92f), 0.0f, bottom, false));
     g.fillPath(fillPath);
 
     // Line: two soft glow passes under a bright core.
-    g.setGradientFill(frequencyGradient(0.10f));
-    g.strokePath(linePath, juce::PathStrokeType(8.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    g.setGradientFill(frequencyGradient(0.25f));
-    g.strokePath(linePath, juce::PathStrokeType(3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (theme::glow > 0.0f)
+    {
+        g.setGradientFill(frequencyGradient(juce::jmin(1.0f, 0.10f * theme::glow)));
+        g.strokePath(linePath, juce::PathStrokeType(8.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setGradientFill(frequencyGradient(juce::jmin(1.0f, 0.25f * theme::glow)));
+        g.strokePath(linePath, juce::PathStrokeType(3.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
     g.setGradientFill(frequencyGradient(1.0f, 0.35f));
     g.strokePath(linePath, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
@@ -346,7 +354,7 @@ void SpectrumView::paint(juce::Graphics& g)
             else
                 peakPath.lineTo(left + (float) x, y);
         }
-        g.setColour(theme::textBright.withAlpha(0.35f));
+        g.setColour(theme::peakHold);
         g.strokePath(peakPath, juce::PathStrokeType(1.0f));
     }
 

@@ -3,6 +3,7 @@
 #include "settings/AppSettings.h"
 #include "ui/MainWindow.h"
 #include "ui/SonarcLookAndFeel.h"
+#include "ui/Theme.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 
@@ -17,8 +18,12 @@ public:
 
     void initialise(const juce::String&) override
     {
-        juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
         settings = std::make_unique<AppSettings>();
+
+        // Colours first, so every component is created with the user's theme.
+        theme::apply(theme::fromVar(settings->theme(), theme::presetNamed(settings->themePreset())));
+        lookAndFeel.refreshColours();
+        juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
         engine = std::make_unique<AudioEngine>(std::make_unique<WasapiCaptureBackend>());
         mainWindow = std::make_unique<MainWindow>(*engine, *settings);
     }

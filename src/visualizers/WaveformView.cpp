@@ -7,14 +7,9 @@ namespace sonarc {
 
 namespace {
 
-const juce::Colour leftColour = theme::accent;
-const juce::Colour rightColour = theme::warn;
-
-// Spectral colouring: what dominates the sound decides the hue.
-struct Rgb { float r, g, b; };
-constexpr Rgb kLowColour { 1.00f, 0.24f, 0.42f };  // bass: hot pink-red
-constexpr Rgb kMidColour { 1.00f, 0.72f, 0.18f };  // mids: amber
-constexpr Rgb kHighColour { 0.35f, 0.90f, 1.00f }; // highs: cyan
+// Classic style channel colours and spectral style band colours come from the theme.
+juce::Colour leftColour() { return theme::waveLeft; }
+juce::Colour rightColour() { return theme::waveRight; }
 
 void channelRange(const WaveBucket& b, int channel, float& lo, float& hi) noexcept
 {
@@ -119,6 +114,13 @@ void WaveformView::setCleanMode(bool clean)
     repaint();
 }
 
+void WaveformView::themeChanged()
+{
+    background = {};
+    invalidateSpectral();
+    repaint();
+}
+
 void WaveformView::resized()
 {
     background = {};
@@ -212,11 +214,14 @@ juce::Colour WaveformView::bandColour(const WaveBucket& b) const noexcept
     const float high = std::sqrt(b.msHigh) * 3.5f;
     const float sum = low + mid + high;
     if (sum <= 1.0e-9f)
-        return juce::Colour::fromFloatRGBA(kMidColour.r, kMidColour.g, kMidColour.b, 1.0f);
+        return theme::waveMid;
 
-    float r = (low * kLowColour.r + mid * kMidColour.r + high * kHighColour.r) / sum;
-    float g = (low * kLowColour.g + mid * kMidColour.g + high * kHighColour.g) / sum;
-    float bl = (low * kLowColour.b + mid * kMidColour.b + high * kHighColour.b) / sum;
+    const auto& lc = theme::waveLow;
+    const auto& mc = theme::waveMid;
+    const auto& hc = theme::waveHigh;
+    float r = (low * lc.getFloatRed() + mid * mc.getFloatRed() + high * hc.getFloatRed()) / sum;
+    float g = (low * lc.getFloatGreen() + mid * mc.getFloatGreen() + high * hc.getFloatGreen()) / sum;
+    float bl = (low * lc.getFloatBlue() + mid * mc.getFloatBlue() + high * hc.getFloatBlue()) / sum;
 
     // Keep mixes vivid: scale so the strongest component is at full brightness.
     const float peak = juce::jmax(r, g, bl, 1.0e-6f);
@@ -317,8 +322,11 @@ void WaveformView::drawEnvelope(juce::Graphics& g, const Lane& lane, float pixel
     g.saveState();
     g.reduceClipRegion(area.toNearestInt());
     // A soft halo first, then the trace itself.
-    g.setColour(colour.withAlpha(0.18f));
-    g.strokePath(envelope, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved));
+    if (theme::glow > 0.0f)
+    {
+        g.setColour(colour.withAlpha(juce::jmin(1.0f, 0.18f * theme::glow)));
+        g.strokePath(envelope, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved));
+    }
     g.setColour(colour);
     g.fillPath(envelope);
     g.restoreState();
@@ -336,8 +344,8 @@ void WaveformView::paintClassic(juce::Graphics& g, juce::Rectangle<float> area)
     {
         if (lane.channel == 2)
             return theme::accent;
-        return lane.channel == 0 ? leftColour.withAlpha(overlaid ? 0.75f : 1.0f)
-                                 : rightColour.withAlpha(overlaid ? 0.6f : 0.9f);
+        return lane.channel == 0 ? leftColour().withAlpha(overlaid ? 0.75f : 1.0f)
+                                 : rightColour().withAlpha(overlaid ? 0.6f : 0.9f);
     };
 
     const int width = juce::jmax(1, juce::roundToInt(area.getWidth()));
@@ -422,7 +430,8 @@ void WaveformView::renderSpectralColumn(int x, std::uint64_t column)
     for (int y = 0; y < height; ++y)
         setPixel(y, juce::PixelARGB(0, 0, 0, 0));
 
-    const float glowPixels = 6.0f * spectralScale;
+    const float glowPixels = 6.0f * spectralScale * juce::jmax(0.01f, theme::glow);
+    const float glowAlpha = juce::jmin(1.0f, 0.38f * theme::glow);
     const float minPixels = juce::jmax(1.0f, minSpanHeight * spectralScale * 0.5f);
 
     for (int l = 0; l < laneCount; ++l)
@@ -467,7 +476,7 @@ void WaveformView::renderSpectralColumn(int x, std::uint64_t column)
             {
                 // Glow outside the peak edge.
                 const float t = 1.0f - (d - peakPixels) / glowPixels;
-                alpha = 0.38f * t * t;
+                alpha = glowAlpha * t * t;
                 whiteness = 0.0f;
             }
             else
@@ -621,13 +630,13 @@ void WaveformView::renderBackground(float pixelScale)
     const auto laneList = lanes();
     if (mode == StereoMode::Stacked)
     {
-        label("L", spectral ? theme::text : leftColour, laneList[0].area);
-        label("R", spectral ? theme::text : rightColour, laneList[1].area);
+        label("L", spectral ? theme::text : leftColour(), laneList[0].area);
+        label("R", spectral ? theme::text : rightColour(), laneList[1].area);
     }
     else if (mode == StereoMode::Overlaid && ! spectral)
     {
-        label("L", leftColour, laneList[0].area);
-        label("R", rightColour, laneList[0].area.withTrimmedLeft(12.0f));
+        label("L", leftColour(), laneList[0].area);
+        label("R", rightColour(), laneList[0].area.withTrimmedLeft(12.0f));
     }
     else
     {

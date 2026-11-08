@@ -22,6 +22,9 @@ public:
     void setTilt(float dbPerOctave);
     void setShowPeakHold(bool shouldShow);
 
+    // The active theme changed: rebuild cached images and redraw.
+    void themeChanged();
+
     // Clean mode (overlay / stick / hidden controls) drops dB labels and info text.
     void setCleanMode(bool clean);
 

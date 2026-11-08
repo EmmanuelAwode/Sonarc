@@ -29,10 +29,12 @@ juce_add_gui_app(Sonarc
 target_sources(Sonarc PRIVATE
     app/Main.cpp
     settings/AppSettings.cpp
+    ui/ColourSettingsPanel.cpp
     ui/MainComponent.cpp
     ui/MainWindow.cpp
     ui/WindowsDesktop.cpp
     ui/SonarcLookAndFeel.cpp
+    ui/Theme.cpp
     visualizers/SpectrogramView.cpp
     visualizers/SpectrumView.cpp
     visualizers/StereoPeakMeterView.cpp

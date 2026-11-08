@@ -2,6 +2,7 @@
 
 #include "audio/AudioEngine.h"
 #include "settings/AppSettings.h"
+#include "ui/Theme.h"
 #include "visualizers/SpectrogramView.h"
 #include "visualizers/SpectrumView.h"
 #include "visualizers/StereoPeakMeterView.h"
@@ -52,6 +53,8 @@ private:
     void setViewMode(ViewMode);
     void setFrozen(bool);
     void drainWaveform();
+    void showColourPanel();
+    void applyTheme(const theme::Colours&, const juce::String& presetName);
 
     void refreshDeviceList();
     void refreshDeviceListIfChanged();
@@ -78,6 +81,7 @@ private:
     WaveformView waveformView;
     SpectrogramView spectrogramView;
     juce::TooltipWindow tooltips { this, 600 };
+    juce::Component::SafePointer<juce::DialogWindow> colourDialog;
 
     std::vector<DeviceSelection> deviceChoices; // ComboBox item id N maps to deviceChoices[N - 1]
     std::vector<AudioDeviceInfo> knownDevices;

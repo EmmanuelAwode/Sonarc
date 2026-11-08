@@ -15,7 +15,7 @@ namespace sonarc {
 class SpectrogramView final : public juce::Component
 {
 public:
-    enum class Palette { Sonarc, Ember, Ice, Grayscale };
+    enum class Palette { Theme, Sonarc, Ember, Ice, Grayscale }; // Theme follows the spectrum colours
 
     SpectrogramView();
 
@@ -36,6 +36,9 @@ public:
     void setTilt(float dbPerOctave); // same display slope as the spectrum, pivot 1 kHz
     void setFftSize(int size);       // shown in the info text
     void setCleanMode(bool clean);   // stream look: no info text
+
+    // The active theme changed: rebuild cached images and redraw.
+    void themeChanged();
 
     void paint(juce::Graphics&) override;
     void resized() override;

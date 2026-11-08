@@ -20,6 +20,9 @@ public:
     void setLevels(const LevelReading& left, const LevelReading& right);
     void clearLevels();
 
+    // The active theme changed: rebuild cached images and redraw.
+    void themeChanged();
+
     std::function<void()> onResetRequested;
 
     void paint(juce::Graphics&) override;

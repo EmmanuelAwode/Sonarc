@@ -15,8 +15,17 @@ struct Stop
 };
 
 // Original palettes: each runs from near-black (quiet) to bright (loud).
-const std::vector<Stop>& stopsFor(SpectrogramView::Palette palette)
+// "Theme" is built from the active spectrum colours.
+std::vector<Stop> stopsFor(SpectrogramView::Palette palette)
 {
+    if (palette == SpectrogramView::Palette::Theme)
+    {
+        const auto& s = theme::spectrumStops;
+        return { { 0.0f, theme::panel.darker(0.7f).getARGB() }, { 0.2f, s[1].darker(0.9f).getARGB() },
+                 { 0.42f, s[2].darker(0.2f).getARGB() }, { 0.62f, s[3].getARGB() },
+                 { 0.82f, s[4].getARGB() }, { 1.0f, s[5].brighter(0.6f).getARGB() } };
+    }
+
     static const std::vector<Stop> sonarc { { 0.0f, 0xff07080b }, { 0.22f, 0xff101c4a }, { 0.45f, 0xff1f6fc8 },
                                             { 0.65f, 0xff3ad0e0 }, { 0.84f, 0xffffc35a }, { 1.0f, 0xfffff6e8 } };
     static const std::vector<Stop> ember { { 0.0f, 0xff07060a }, { 0.28f, 0xff3a1050 }, { 0.52f, 0xffa82d5a },
@@ -29,6 +38,7 @@ const std::vector<Stop>& stopsFor(SpectrogramView::Palette palette)
         case SpectrogramView::Palette::Ember:     return ember;
         case SpectrogramView::Palette::Ice:       return ice;
         case SpectrogramView::Palette::Grayscale: return grey;
+        case SpectrogramView::Palette::Theme:
         case SpectrogramView::Palette::Sonarc:    break;
     }
     return sonarc;
@@ -106,6 +116,14 @@ void SpectrogramView::setFftSize(int size)
     repaint();
 }
 
+void SpectrogramView::themeChanged()
+{
+    rebuildPalette();
+    image = {};   // re-render history in the new colours
+    overlay = {};
+    repaint();
+}
+
 void SpectrogramView::setCleanMode(bool clean)
 {
     if (clean == cleanMode)
@@ -128,7 +146,7 @@ juce::Rectangle<int> SpectrogramView::plotArea() const noexcept
 
 void SpectrogramView::rebuildPalette()
 {
-    const auto& stops = stopsFor(currentPalette);
+    const auto stops = stopsFor(currentPalette);
     for (int i = 0; i < 256; ++i)
     {
         const float t = (float) i / 255.0f;

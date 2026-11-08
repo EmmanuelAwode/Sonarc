@@ -1,5 +1,7 @@
 #include "ui/MainComponent.h"
+#include "ui/ColourSettingsPanel.h"
 #include "ui/MainWindow.h"
+#include "ui/SonarcLookAndFeel.h"
 #include "ui/Theme.h"
 
 namespace sonarc {
@@ -39,6 +41,7 @@ struct PaletteInfo
 };
 
 constexpr PaletteInfo kPalettes[] = {
+    { "theme",     "Theme colours",                SpectrogramView::Palette::Theme },
     { "sonarc",    "Sonarc (blue - cyan - amber)", SpectrogramView::Palette::Sonarc },
     { "ember",     "Ember (purple - orange)",      SpectrogramView::Palette::Ember },
     { "ice",       "Ice (blue - white)",           SpectrogramView::Palette::Ice },
@@ -144,9 +147,6 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     addAndMakeVisible(pinButton);
 
     overlayButton.setTooltip("Borderless overlay: drag anywhere to move, double-click or Esc to exit (O)");
-    overlayButton.setColour(juce::TextButton::buttonColourId, theme::raised);
-    overlayButton.setColour(juce::TextButton::textColourOffId, theme::text);
-    overlayButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     overlayButton.onClick = [this]
     {
         if (auto* w = window())
@@ -155,11 +155,6 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     addAndMakeVisible(overlayButton);
 
     stickButton.setTooltip("Dock to the top of the screen as a toolbar that other windows can't cover (S)");
-    stickButton.setColour(juce::TextButton::buttonColourId, theme::raised);
-    stickButton.setColour(juce::TextButton::buttonOnColourId, theme::accent.withAlpha(0.35f));
-    stickButton.setColour(juce::TextButton::textColourOffId, theme::text);
-    stickButton.setColour(juce::TextButton::textColourOnId, theme::textBright);
-    stickButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     stickButton.onClick = [this]
     {
         if (auto* w = window())
@@ -451,6 +446,63 @@ void MainComponent::setViewMode(ViewMode mode)
     resized();
 }
 
+void MainComponent::showColourPanel()
+{
+    if (colourDialog != nullptr)
+    {
+        colourDialog->toFront(true);
+        return;
+    }
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(new ColourSettingsPanel(theme::current(), settings.themePreset(),
+                                                     [this](const theme::Colours& colours, const juce::String& preset)
+                                                     {
+                                                         applyTheme(colours, preset);
+                                                     }));
+    options.dialogTitle = "Sonarc - Colours & theme";
+    options.dialogBackgroundColour = theme::background;
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    options.componentToCentreAround = this;
+
+    colourDialog = options.launchAsync();
+    if (colourDialog != nullptr)
+    {
+        // Sonarc is often pinned on top; the dialog must not open behind it.
+        colourDialog->setAlwaysOnTop(true);
+        colourDialog->toFront(true);
+        if (auto* panel = dynamic_cast<ColourSettingsPanel*>(colourDialog->getContentComponent()))
+            panel->focusPresets();
+    }
+}
+
+void MainComponent::applyTheme(const theme::Colours& colours, const juce::String& presetName)
+{
+    theme::apply(colours);
+    settings.setTheme(theme::toVar(colours));
+    settings.setThemePreset(presetName);
+
+    if (auto* sonarcLookAndFeel = dynamic_cast<SonarcLookAndFeel*>(&getLookAndFeel()))
+        sonarcLookAndFeel->refreshColours();
+
+    spectrumView.themeChanged();
+    waveformView.themeChanged();
+    spectrogramView.themeChanged();
+    meterView.themeChanged();
+
+    if (auto* w = window())
+    {
+        w->setBackgroundColour(theme::background);
+        w->sendLookAndFeelChange();
+    }
+    if (colourDialog != nullptr)
+        colourDialog->setBackgroundColour(theme::background);
+    updateStatus();
+    repaint();
+}
+
 void MainComponent::setFrozen(bool shouldFreeze)
 {
     frozen = shouldFreeze;
@@ -590,10 +642,19 @@ void MainComponent::showContextMenu()
                               });
     waveMenu.addSubMenu("Minimum thickness", thicknessMenu);
 
+    juce::PopupMenu themeMenu;
+    for (const auto& preset : theme::presets())
+        themeMenu.addItem(preset.name, true, settings.themePreset() == preset.name,
+                          [this, name = preset.name] { applyTheme(theme::presetNamed(name), name); });
+    themeMenu.addSeparator();
+    themeMenu.addItem("Customise colours...\tC", [this] { showColourPanel(); });
+
     juce::PopupMenu menu;
     menu.addSubMenu("View", viewMenu);
     menu.addSubMenu("Waveform", waveMenu);
     menu.addSubMenu("Spectrogram", sgramMenu);
+    menu.addSubMenu("Theme", themeMenu);
+    menu.addItem("Colours & theme...\tC", [this] { showColourPanel(); });
     menu.addItem("Freeze display\tF", true, frozen, [this] { setFrozen(! frozen); });
     menu.addSeparator();
     juce::PopupMenu stickMenu;
@@ -653,6 +714,11 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     if (c == 'h')
     {
         toggleControls();
+        return true;
+    }
+    if (c == 'c')
+    {
+        showColourPanel();
         return true;
     }
     if (c == 'f')

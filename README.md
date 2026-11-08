@@ -150,6 +150,13 @@ Play music. With **System default output** selected, the spectrum and meters fol
   - Right-click → *Spectrogram* sets the **speed** (15–240 px/s), the **resolution** (FFT 1024–8192: larger is sharper in frequency, especially the low end, but blurrier in time), the **palette** (Sonarc, Ember, Ice, Grayscale) and the **range** (60/90/120 dB below 0 dBFS).
   - It uses the same calibration and *Tilt* as the spectrum.
   - It is computed only while it is on screen.
+- **Colours & theme (C, or right-click → Colours & theme...):** change the look of everything.
+  - **Presets:** *Sonarc*, *Neon Night*, *Sunset*, *Arctic*, *Forest* and *Studio Mono*. For a one-click switch, use right-click → *Theme*. In the panel, the up/down arrows flip through presets.
+  - **Customise any colour:** click a swatch, then use the picker (colour field, hue, RGB/alpha and hex). The swatches cover window & panels (background, panels, buttons, grid, labels, text, accent), the spectrum's six frequency colours (20 Hz to 20 kHz) and peak-hold line, the waveform's bass/mid/high colours (spectral style) and left/right colours (classic style), and the five meter colours from quiet to clip.
+  - **Spectrum fill** and **Glow** sliders set the area opacity and glow strength (0 turns the glow off).
+  - Changes show live and are saved automatically. Once you edit a preset it becomes *Custom*, and *Reset to preset* goes back.
+  - The spectrogram has a *Theme colours* palette that follows your spectrum colours (right-click → *Spectrogram*).
+  - Warning and clip-red stay fixed, because they carry meaning.
 - **Freeze (F):** pauses everything (spectrum, waveform, spectrogram and meters) so you can inspect a moment. Press F again to go live.
 - **On top (T):** pins Sonarc above every other window, such as a browser, video player, FL Studio or OBS. A watchdog checks every 0.75 s and puts Sonarc back on top if another app (e.g. another always-on-top window) has covered it.
 - **Stick (S, or the Stick button):** docks Sonarc across the full width of the screen's top edge, like a toolbar.

@@ -4,16 +4,23 @@
 namespace sonarc {
 
 SonarcLookAndFeel::SonarcLookAndFeel()
-    : LookAndFeel_V4(LookAndFeel_V4::ColourScheme(theme::background, // window background
-                                                   theme::raised,     // widget background
-                                                   theme::panel,      // menu background
-                                                   theme::outline,    // outline
-                                                   theme::text,       // default text
-                                                   theme::raised,     // default fill
-                                                   theme::background, // highlighted text
-                                                   theme::accent,     // highlighted fill
-                                                   theme::text))      // menu text
 {
+    refreshColours();
+}
+
+// Re-reads the active theme. Call after theme::apply(), then sendLookAndFeelChange().
+void SonarcLookAndFeel::refreshColours()
+{
+    setColourScheme(LookAndFeel_V4::ColourScheme(theme::background, // window background
+                                                 theme::raised,     // widget background
+                                                 theme::panel,      // menu background
+                                                 theme::outline,    // outline
+                                                 theme::text,       // default text
+                                                 theme::raised,     // default fill
+                                                 theme::background, // highlighted text
+                                                 theme::accent,     // highlighted fill
+                                                 theme::text));     // menu text
+
     setColour(juce::ComboBox::backgroundColourId, theme::raised);
     setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
     setColour(juce::ComboBox::textColourId, theme::text);
@@ -27,6 +34,11 @@ SonarcLookAndFeel::SonarcLookAndFeel()
     setColour(juce::TooltipWindow::backgroundColourId, theme::raised);
     setColour(juce::TooltipWindow::textColourId, theme::text);
     setColour(juce::TooltipWindow::outlineColourId, theme::outline);
+    setColour(juce::TextButton::buttonColourId, theme::raised);
+    setColour(juce::TextButton::buttonOnColourId, theme::accent.withAlpha(0.35f));
+    setColour(juce::TextButton::textColourOffId, theme::text);
+    setColour(juce::TextButton::textColourOnId, theme::textBright);
+    setColour(juce::ScrollBar::thumbColourId, theme::raised.brighter(0.3f));
 }
 
 juce::Font SonarcLookAndFeel::getComboBoxFont(juce::ComboBox&) { return theme::font(13.0f); }

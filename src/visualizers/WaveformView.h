@@ -51,6 +51,9 @@ public:
     // Clean mode (overlay / stick / hidden controls) drops labels for a stream-ready look.
     void setCleanMode(bool clean);
 
+    // The active theme changed: rebuild cached images and redraw.
+    void themeChanged();
+
     std::function<void(float)> onWindowChanged; // after a mouse-wheel zoom
 
     void paint(juce::Graphics&) override;

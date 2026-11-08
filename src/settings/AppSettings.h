@@ -76,6 +76,12 @@ public:
     int stickHeight() const; // logical pixels
     void setStickHeight(int pixels);
 
+    juce::var theme() const;          // JSON object of colours, or void if never customised
+    void setTheme(const juce::var& colours);
+
+    juce::String themePreset() const; // preset name, or "Custom"
+    void setThemePreset(const juce::String& name);
+
     juce::String windowState() const;
     void setWindowState(const juce::String& state);
 

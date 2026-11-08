@@ -43,6 +43,12 @@ float StereoPeakMeterView::yForDb(float db, juce::Rectangle<float> bar) const no
 }
 
 
+void StereoPeakMeterView::themeChanged()
+{
+    background = {};
+    repaint();
+}
+
 void StereoPeakMeterView::resized()
 {
     background = {};
@@ -114,19 +120,20 @@ void StereoPeakMeterView::renderBackground(float pixelScale)
 void StereoPeakMeterView::drawChannel(juce::Graphics& g, juce::Rectangle<float> bar, const LevelReading& level) const
 {
     // Colour is a function of height, so the bar warms as it rises.
-    juce::ColourGradient gradient(theme::accentDeep, 0.0f, bar.getBottom(), theme::hot, 0.0f, bar.getY(), false);
+    const auto& stops = theme::meterStops;
+    juce::ColourGradient gradient(stops[0], 0.0f, bar.getBottom(), stops[4], 0.0f, bar.getY(), false);
     const float span = bar.getHeight();
     auto proportionFor = [&](float db) { return (bar.getBottom() - yForDb(db, bar)) / span; };
-    gradient.addColour(proportionFor(-30.0f), theme::accent);
-    gradient.addColour(proportionFor(-12.0f), theme::ok);
-    gradient.addColour(proportionFor(-6.0f), theme::warn);
+    gradient.addColour(proportionFor(-30.0f), stops[1]);
+    gradient.addColour(proportionFor(-12.0f), stops[2]);
+    gradient.addColour(proportionFor(-6.0f), stops[3]);
 
     const float peakY = yForDb(level.peakDb, bar);
     const float rmsY = yForDb(level.rmsDb, bar);
 
     // Soft glow behind the lit part.
     g.setGradientFill(gradient);
-    g.setOpacity(0.16f);
+    g.setOpacity(juce::jmin(1.0f, 0.16f * theme::glow));
     g.fillRoundedRectangle(bar.withTop(peakY).expanded(3.0f, 2.0f), 4.0f);
 
     g.setOpacity(0.45f);

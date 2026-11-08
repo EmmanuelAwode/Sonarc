@@ -26,6 +26,8 @@ namespace keys {
     static const juce::Identifier spectrogramRange { "spectrogramRangeDb" };
     static const juce::Identifier stickMode { "stickMode" };
     static const juce::Identifier stickHeight { "stickHeight" };
+    static const juce::Identifier theme { "theme" };
+    static const juce::Identifier themePreset { "themePreset" };
 }
 
 AppSettings::AppSettings(juce::File settingsFile) : file(std::move(settingsFile))
@@ -135,6 +137,18 @@ void AppSettings::setStickMode(const juce::String& mode) { set(keys::stickMode, 
 
 int AppSettings::stickHeight() const { return get(keys::stickHeight, 110); }
 void AppSettings::setStickHeight(int pixels) { set(keys::stickHeight, pixels); }
+
+juce::var AppSettings::theme() const { return get(keys::theme, {}); }
+
+void AppSettings::setTheme(const juce::var& colours)
+{
+    // var equality is by reference for objects, so always store and mark dirty.
+    root->setProperty(keys::theme, colours);
+    dirty = true;
+}
+
+juce::String AppSettings::themePreset() const { return get(keys::themePreset, "Sonarc").toString(); }
+void AppSettings::setThemePreset(const juce::String& name) { set(keys::themePreset, name); }
 
 juce::String AppSettings::windowState() const { return get(keys::windowState, "").toString(); }
 void AppSettings::setWindowState(const juce::String& state) { set(keys::windowState, state); }

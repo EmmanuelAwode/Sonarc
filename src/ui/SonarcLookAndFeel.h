@@ -9,6 +9,8 @@ class SonarcLookAndFeel final : public juce::LookAndFeel_V4
 public:
     SonarcLookAndFeel();
 
+    void refreshColours();
+
     juce::Font getComboBoxFont(juce::ComboBox&) override;
     juce::Font getPopupMenuFont() override;
     juce::Font getLabelFont(juce::Label&) override;
