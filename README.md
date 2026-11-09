@@ -189,9 +189,28 @@ Settings and the window position are saved to `%APPDATA%\Sonarc\settings.json`.
 
 ---
 
+## Measuring BPM / key accuracy
+
+`sonarc_analyze` runs the app's exact BPM and key detectors over audio files (WAV, MP3, FLAC, OGG, AIFF). It reports the reading shown for most of each track, how stable it was, and how long the first reading took:
+
+```bat
+build\tools\sonarc_analyze_artefacts\Release\sonarc_analyze.exe "C:\Music\My tracks"
+```
+
+`tools/make_test_set.js` (Node) and `tools/make_test_set.py` generate 15 music-like test tracks with known tempo and key: house, hip-hop with swing, trap, DnB, pop, techno, ballad, reggaeton, funk, afrobeat (3-3-2), lo-fi with 7th chords, EDM, a 3/4 waltz, piano only, and drums only. The JS version is deterministic and produces byte-identical WAVs in Node and in a browser, so web analysers can be fed exactly the same audio.
+
+Comparison on that set (30 s tracks), against Tunebat's free in-browser analyser:
+
+| | Key correct | "No key" on drums only | BPM exact | BPM allowing ½ / ×2 |
+|---|---|---|---|---|
+| Sonarc | 14 / 14 | yes | 13 / 15 | 15 / 15 |
+| Tunebat (Standard) | 11 / 14 | no ("B major") | 13 / 15 | 15 / 15 |
+
+Sonarc's two "BPM exact" misses are octave choices from the 85–170 range (174 → 87, 72 → 144), and the ½ / ×2 buttons switch them. Tunebat's were 140 → 70 and 174 → 87. Synthetic tracks are cleaner than real mixes, and Tunebat analyses whole files while Sonarc listens live.
+
 ## Measurement notes and limitations (read these)
 
-- **BPM:** it's accurate to within about ±1 BPM on steady, beat-driven music. That's measured in tests from 80 to 175 BPM, and as 124.4 on a 124 BPM track in the app. Music with free tempo (rubato), live drift, sparse or highly syncopated rhythms can read low-confidence or "--". Half and double time is inherently ambiguous, which is what the range setting and the 1/2 / x2 buttons are for.
+- **BPM:** it's accurate to within about ±1 BPM on steady, beat-driven music. That's measured in tests from 80 to 175 BPM (including afrobeat 3-3-2 and swung rhythms), and as 124.4 on a 124 BPM track in the app. Music with free tempo (rubato), live drift, sparse or highly syncopated rhythms can read low-confidence or "--". Half and double time is inherently ambiguous, which is what the range setting and the 1/2 / x2 buttons are for.
 - **Key:** it estimates the overall key from the last ~20 s, so short modulations, modal or atonal music, and the relative major/minor pair (e.g. C major vs A minor, which share every note) are the usual sources of disagreement with a human. It doesn't analyse chords.
 - **Loopback:** BPM and key analyse whatever the selected source plays. With *System default output* that is *every* app mixed together, so use *Applications* to analyse just one player.
 

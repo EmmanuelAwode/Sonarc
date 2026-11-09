@@ -29,6 +29,7 @@ else()
 endif()
 
 add_subdirectory(src)
+add_subdirectory(tools)
 
 if(SONARC_BUILD_TESTS)
     enable_testing()

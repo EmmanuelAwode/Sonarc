@@ -93,6 +93,46 @@ TEST_CASE("Tempo: drums with sustained chords (the on-screen test track) read th
     }
 }
 
+TEST_CASE("Tempo: a tempo right at the range minimum (85 in 85-170) is not doubled")
+{
+    for (double bpm : { 85.0, 84.6, 85.4 })
+        CHECK_NEAR(analyse(bpm, 14.0).bpm, bpm, 1.0);
+}
+
+TEST_CASE("Tempo: afrobeat 3-3-2 rhythm is read at the beat, not three-quarters of it")
+{
+    // Kick on 16ths 0, 6, 8, 14 and hats on 2, 5, 7, 10, 13, 15: the hats are
+    // mostly three 16ths apart, which looks like a beat 3/4 as long.
+    for (double bpm : { 98.0, 104.0, 112.0 })
+    {
+        std::mt19937 rng(9);
+        std::uniform_real_distribution<float> noise(-1.0f, 1.0f);
+        const double sixteenth = 60.0 / bpm / 4.0;
+        std::vector<StereoFrame> audio((std::size_t) (14.0 * kRate));
+        for (std::size_t i = 0; i < audio.size(); ++i)
+        {
+            const double t = (double) i / kRate;
+            const int step = (int) (t / sixteenth) % 16;
+            const double inStep = std::fmod(t, sixteenth);
+            float s = 0.0f;
+            if (step == 0 || step == 6 || step == 8 || step == 14)
+                s += 0.6f * (float) (std::sin(2.0 * std::numbers::pi * (50.0 + 90.0 * std::exp(-inStep * 30.0)) * inStep) * std::exp(-inStep * 12.0));
+            if (step == 4 || step == 12)
+                s += 0.25f * noise(rng) * (float) std::exp(-inStep * 25.0);
+            if (step == 2 || step == 5 || step == 7 || step == 10 || step == 13 || step == 15)
+                s += 0.12f * noise(rng) * (float) std::exp(-inStep * 70.0);
+            audio[i] = { s, s };
+        }
+
+        TempoAnalyzer analyzer;
+        analyzer.prepare(kRate);
+        feed(analyzer, audio);
+        if (std::abs(analyzer.latest().bpm - bpm) > 1.0)
+            std::printf("    afrobeat %.0f BPM read as %.1f\n", bpm, analyzer.latest().bpm);
+        CHECK_NEAR(analyzer.latest().bpm, bpm, 1.0);
+    }
+}
+
 TEST_CASE("Tempo: sweep 80-175 BPM reads every tempo (folded into 85-170)")
 {
     int wrong = 0;

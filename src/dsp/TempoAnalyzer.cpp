@@ -206,9 +206,14 @@ float TempoAnalyzer::fold(float bpm) const noexcept
 {
     if (foldMinimum <= 0.0f || bpm <= 0.0f)
         return bpm;
-    while (bpm < foldMinimum)
+
+    // The working range starts 2 % below the chosen minimum, so a song right at
+    // the minimum (85 BPM in "85-170") can't flip to double on tiny estimation
+    // differences. A song at exactly the maximum (170) still reads as half (85).
+    const float low = foldMinimum * 0.98f;
+    while (bpm < low)
         bpm *= 2.0f;
-    while (bpm >= foldMinimum * 2.0f)
+    while (bpm >= low * 2.0f)
         bpm *= 0.5f;
     return bpm;
 }
@@ -219,10 +224,7 @@ void TempoAnalyzer::estimate() noexcept
     lastRawValid = false;
 
     const double fps = framesPerSecond;
-    const auto lagMin = (std::size_t) std::floor(60.0 * fps / 240.0);
-    const auto lagMax = (std::size_t) std::ceil(60.0 * fps / 50.0);
-
-    bool rawValid = length >= (std::size_t) (4.0 * fps) && 3 * lagMax < length;
+    bool rawValid = length >= (std::size_t) (4.0 * fps); // need ~4 s of history
 
     // Oldest first.
     const auto recentFrames = std::min(length, (std::size_t) (1.5 * fps));
@@ -277,8 +279,9 @@ void TempoAnalyzer::estimate() noexcept
 
         if (rawValid)
         {
-            // Normalised, unbiased autocorrelation up to three times the longest period.
-            const auto maxLag = std::min(length - 1, 3 * lagMax);
+            // Normalised, unbiased autocorrelation. Lags beyond 60 % of the history rest
+            // on too few samples (and the unbiasing inflates them), so stop there.
+            const auto maxLag = std::min(length - 1, (std::size_t) (0.6 * (double) length));
             for (std::size_t lag = 1; lag <= maxLag; ++lag)
             {
                 double sum = 0.0;
@@ -291,6 +294,8 @@ void TempoAnalyzer::estimate() noexcept
             // correlation as the best value within one lag of where it should be.
             auto peakNear = [&](double lag)
             {
+                if (lag + 1.0 > (double) maxLag)
+                    return 0.0; // not enough history yet to judge this far out
                 const auto from = (std::size_t) std::max(1.0, std::floor(lag - 1.0));
                 const auto to = (std::size_t) std::min((double) maxLag, std::ceil(lag + 1.0));
                 float best = correlation[from];
@@ -299,44 +304,73 @@ void TempoAnalyzer::estimate() noexcept
                 return (double) best;
             };
 
-            // Score each period by itself, its double and its half: a true beat repeats
-            // at twice its period and usually has activity (8th notes) at half of it,
-            // which a 1.5-beat or other off-grid period does not. Weighted by a broad
-            // preference for tempos near 120 BPM (one octave either side barely matters).
-            double best = -1.0e9;
-            std::size_t bestLag = lagMin;
-            for (auto lag = lagMin; lag <= lagMax; ++lag)
+            // Candidate beats: every period inside the chosen tempo range (one octave),
+            // in quarter-frame steps. Each is scored by how strongly the onsets repeat at
+            // *every* multiple of it (1, 2, 3, 4... beats, as far back as the history
+            // allows), plus a little for activity at the half beat (8th notes). A real
+            // beat lines up with all of them, even when the pattern itself only repeats
+            // every 2 beats or every bar; a 3/4- or 1.5-beat pulse (3-3-2 rhythms,
+            // dotted patterns) only lines up with some. A mild preference for tempos
+            // near 120 BPM breaks near-ties.
+            const double low = foldMinimum > 0.0f ? foldMinimum * 0.98 : 83.3;
+            const double shortest = 60.0 * fps / (2.0 * low);
+            const double longest = 60.0 * fps / low;
+
+            double best = -1.0e9, bestPeriod = shortest, bestComb = 0.0;
+            for (double period = shortest; period <= longest; period += 0.25)
             {
-                const double bpm = 60.0 * fps / (double) lag;
-                const double prior = std::exp(-0.5 * std::pow(std::log2(bpm / 120.0) / 0.9, 2.0));
-                const double score = (peakNear((double) lag) + 0.5 * peakNear(2.0 * lag) + 0.25 * peakNear(0.5 * lag)) * prior;
+                double sum = 0.0, weight = 0.0;
+                for (int k = 1; k * period + 1.0 <= (double) maxLag; ++k)
+                {
+                    const double w = k <= 4 ? 1.0 : 0.5; // the first bar matters most
+                    sum += w * peakNear(k * period);
+                    weight += w;
+                }
+                if (weight <= 0.0)
+                    continue;
+
+                const double comb = sum / weight;
+                const double bpm = 60.0 * fps / period;
+                const double prior = std::exp(-0.5 * std::pow(std::log2(bpm / 120.0) / 1.5, 2.0));
+                const double score = (comb + 0.25 * peakNear(0.5 * period)) * prior;
                 if (score > best)
                 {
                     best = score;
-                    bestLag = lag;
+                    bestPeriod = period;
+                    bestComb = comb;
                 }
             }
 
-            // Move onto the actual correlation peak next to the chosen lag.
-            for (const auto neighbour : { bestLag - 1, bestLag + 1 })
-                if (neighbour >= lagMin && neighbour <= lagMax && correlation[neighbour] > correlation[bestLag])
-                    bestLag = neighbour;
+            // Refine on the strongest of the first few multiples (the beat itself may
+            // repeat only weakly), with parabolic interpolation around its peak.
+            int bestMultiple = 1;
+            double strongest = -1.0e9;
+            for (int k = 1; k <= 4 && k * bestPeriod + 1.0 <= (double) maxLag; ++k)
+                if (const double r = peakNear(k * bestPeriod); r > strongest)
+                {
+                    strongest = r;
+                    bestMultiple = k;
+                }
 
-            // Parabolic interpolation for a sub-frame period.
-            double refinedLag = (double) bestLag;
-            if (bestLag > lagMin && bestLag < lagMax)
+            auto peak = (std::size_t) std::lround(bestMultiple * bestPeriod);
+            for (const auto neighbour : { peak - 1, peak + 1 })
+                if (neighbour >= 1 && neighbour < maxLag && correlation[neighbour] > correlation[peak])
+                    peak = neighbour;
+
+            double refinedLag = (double) peak;
+            if (peak > 1 && peak < maxLag)
             {
-                const double a = correlation[bestLag - 1], b = correlation[bestLag], c = correlation[bestLag + 1];
+                const double a = correlation[peak - 1], b = correlation[peak], c = correlation[peak + 1];
                 const double denominator = a - 2.0 * b + c;
                 if (std::abs(denominator) > 1.0e-9)
                     refinedLag += std::clamp(0.5 * (a - c) / denominator, -0.5, 0.5);
             }
 
             // How clearly periodic the onsets are. For random onsets the correlation at any
-            // lag is about +/-1/sqrt(length) (~0.04 over 8 s), so even the best of ~90 lags
-            // stays near 0.12; a real beat correlates far more strongly.
-            rawConfidence = (float) std::clamp((correlation[bestLag] - 0.2) / 0.35, 0.0, 1.0);
-            rawBpm = fold((float) (60.0 * fps / refinedLag));
+            // lag is about +/-1/sqrt(length) (~0.04 over 8 s), and averaging over the
+            // multiples shrinks that further; a real beat correlates far more strongly.
+            rawConfidence = (float) std::clamp((bestComb - 0.2) / 0.35, 0.0, 1.0);
+            rawBpm = fold((float) (60.0 * fps * bestMultiple / refinedLag));
             rawValid = rawConfidence > 0.0f && std::isfinite(rawBpm);
 
             // Beat phase: the offset of a pulse train (at the folded tempo) that best lines up with the onsets.
