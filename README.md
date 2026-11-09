@@ -58,6 +58,8 @@ Sonarc/
 │   ├── ui/                     main layout, look and feel, theme
 │   ├── settings/AppSettings.*  JSON settings (%APPDATA%\Sonarc\settings.json)
 │   └── util/SpscRingBuffer.h
+├── resources/                  logo.png / logo-small.png (app icon, from tools/make_logo.py)
+├── tools/                      sonarc_analyze, test-set generators, make_logo.py, install.ps1
 └── tests/                      DSP unit tests (no external test framework)
 ```
 
@@ -125,6 +127,18 @@ build\src\Sonarc_artefacts\Release\Sonarc.exe
 ```
 
 Play music. With **System default output** selected, the spectrum and meters follow whatever Windows is playing.
+
+### 5. Install (Start menu, desktop, taskbar)
+
+```bat
+powershell -ExecutionPolicy Bypass -File tools\install.ps1
+```
+
+This copies `Sonarc.exe` to `%LOCALAPPDATA%\Programs\Sonarc` (no admin rights needed) and adds **Sonarc** to the Start menu and the desktop, with the logo as its icon. Add `-NoDesktop` to skip the desktop shortcut, or `-Uninstall` to remove it all (settings are kept).
+
+- **Taskbar:** open Sonarc from Start, right-click its taskbar icon and choose **Pin to taskbar**. Windows doesn't let programs pin themselves.
+- **Updating:** after a rebuild, run the script again. It closes the installed Sonarc if it's running, then replaces it.
+- **Logo:** a musical "S" whose tail ends in a note head, in the Sonarc spectrum colours. It's drawn by `python tools/make_logo.py` into `resources/`, and the build turns it into the exe icon (taskbar, Start, title bar) and the mark next to the wordmark in the control bar.
 
 ---
 

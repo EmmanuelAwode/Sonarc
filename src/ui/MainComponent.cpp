@@ -4,6 +4,8 @@
 #include "ui/SonarcLookAndFeel.h"
 #include "ui/Theme.h"
 
+#include <BinaryData.h>
+
 namespace sonarc {
 
 namespace {
@@ -69,6 +71,7 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
 {
     setOpaque(true);
     setWantsKeyboardFocus(true);
+    logo = juce::ImageCache::getFromMemory(BinaryData::logosmall_png, BinaryData::logosmall_pngSize);
 
     // Device picker
     deviceBox.setTooltip("Audio source. Playback devices are captured via WASAPI loopback (what you hear).");
@@ -982,9 +985,12 @@ void MainComponent::paint(juce::Graphics& g)
 
     if (controlsVisible)
     {
+        constexpr int logoSize = 24;
+        g.drawImageWithin(logo, 10, (kControlBarHeight - logoSize) / 2, logoSize, logoSize,
+                          juce::RectanglePlacement::centred);
         g.setColour(theme::textBright);
         g.setFont(theme::font(14.0f, true));
-        g.drawText("SONARC", juce::Rectangle<int>(12, 0, 70, kControlBarHeight), juce::Justification::centredLeft, false);
+        g.drawText("SONARC", juce::Rectangle<int>(40, 0, 70, kControlBarHeight), juce::Justification::centredLeft, false);
     }
 }
 
@@ -1000,7 +1006,7 @@ void MainComponent::resized()
     if (controlsVisible)
     {
         auto bar = bounds.removeFromTop(kControlBarHeight).reduced(8, 6);
-        bar.removeFromLeft(74); // wordmark
+        bar.removeFromLeft(102); // logo + wordmark
 
         juce::FlexBox flex;
         flex.alignItems = juce::FlexBox::AlignItems::stretch;

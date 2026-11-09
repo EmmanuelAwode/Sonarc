@@ -110,6 +110,7 @@ private:
     WaveformView waveformView;
     SpectrogramView spectrogramView;
     juce::TooltipWindow tooltips { this, 600 };
+    juce::Image logo;
     juce::Component::SafePointer<juce::DialogWindow> colourDialog;
     juce::Component::SafePointer<juce::DialogWindow> styleDialog;
 

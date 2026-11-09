@@ -26,7 +26,11 @@ endif()
 juce_add_gui_app(Sonarc
     PRODUCT_NAME "Sonarc"
     COMPANY_NAME "Sonarc"
-    VERSION ${PROJECT_VERSION})
+    VERSION ${PROJECT_VERSION}
+    # The musical-S logo (tools/make_logo.py); JUCE turns these into the exe's .ico,
+    # which Windows shows on the taskbar, Start menu, shortcuts and title bar.
+    ICON_BIG "${CMAKE_SOURCE_DIR}/resources/logo.png"
+    ICON_SMALL "${CMAKE_SOURCE_DIR}/resources/logo-small.png")
 
 target_sources(Sonarc PRIVATE
     app/Main.cpp
@@ -57,9 +61,13 @@ if(MSVC)
     target_compile_options(Sonarc PRIVATE /utf-8)
 endif()
 
+# The logo, drawn next to the wordmark in the control bar.
+juce_add_binary_data(SonarcAssets SOURCES "${CMAKE_SOURCE_DIR}/resources/logo-small.png")
+
 target_link_libraries(Sonarc
     PRIVATE
         sonarc_core
+        SonarcAssets
         juce::juce_gui_extra
         comctl32
     PUBLIC
