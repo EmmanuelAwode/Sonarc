@@ -23,7 +23,8 @@ public:
     // The active theme changed: rebuild cached images and redraw.
     void themeChanged();
 
-    std::function<void()> onResetRequested;
+    std::function<void()> onResetRequested; // left click
+    std::function<void()> onContextMenu;    // right click
 
     void paint(juce::Graphics&) override;
     void resized() override;

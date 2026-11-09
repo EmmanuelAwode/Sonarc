@@ -176,10 +176,13 @@ Play music. With **System default output** selected, the spectrum and meters fol
 - **Stick (S, or the Stick button):** docks Sonarc across the full width of the screen's top edge, like a toolbar.
   - Windows reserves that strip, so maximised windows sit **below** the bar instead of covering it. It works like the taskbar.
   - Right-click → *Stick to screen edge* chooses top or bottom and the bar height (60–240 px).
-  - When a fullscreen game or video opens, the bar steps aside and comes back when it closes.
-  - Press S again (or double-click) to return the window to where it was.
+  - When a fullscreen game or video opens, the bar steps aside and comes back when it closes. **With On top (T) switched on it stays over fullscreen apps instead**, e.g. a bar across a fullscreen video.
+  - Press S again (or Esc) to return the window to where it was. Double-clicking the bar doesn't unstick it, so a stray double-click can't knock it loose.
 - **Overlay (O):** removes the title bar and frame. Drag anywhere on the spectrum to move the window and drag the edges to resize it. **Double-click or press Esc** to get the frame back. The meters stay in the same place on screen when you switch.
-- **Right-click** anywhere on the spectrum for all window options: always on top, overlay, show controls, **opacity** (100–30%), reset peaks and quit.
+- **Right-click** anywhere (visualisers, BPM, Key or meters) for every option, so nothing needs the control bar, even while stuck or in overlay:
+  - **Audio source:** the same list as the source box (playback loopback, recording inputs, applications), with the current one named in the menu.
+  - **Spectrum:** FFT size, smoothing, fall speed, tilt and peak hold.
+  - View, waveform, spectrogram, modules, theme, freeze, stick, always on top, overlay, show controls, **opacity** (100–30%), reset peaks and quit.
 - Pin, overlay, opacity and window position are remembered between launches.
 - **Applications (per-app capture):** the source list has an *Applications* section listing every program with an audio session, such as Chrome, Spotify, a game or a video player. "- playing" marks the ones making sound right now. Pick one and Sonarc meters **only that program**, including audio from its child processes (browser tabs, Electron apps), even while other apps play. The list refreshes every few seconds. Sonarc remembers the app by name: if you close it, the status bar says it's waiting, and capture resumes automatically when it plays again. This needs Windows 10 version 2004 or later, or Windows 11. Windows mixes the app's audio to stereo float at your output's sample rate.
 - Playback devices still show **everything** on that output.

@@ -128,6 +128,14 @@ void AppBar::undock()
     fullscreenApp = false;
 }
 
+void AppBar::setStayOverFullscreen(bool shouldStay)
+{
+    stayOverFullscreen = shouldStay;
+    if (window != nullptr && fullscreenApp)
+        SetWindowPos(toHwnd(window), stayOverFullscreen ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
 void AppBar::setThickness(int newThickness)
 {
     thickness = newThickness;
@@ -178,8 +186,9 @@ void AppBar::handleNotification(unsigned long long code, long long data)
 
         case ABN_FULLSCREENAPP:
             // Step out of the way of fullscreen games and videos, come back afterwards.
+            // Unless pinned on top by the user, who wants it over a fullscreen video.
             fullscreenApp = data != 0;
-            SetWindowPos(toHwnd(window), fullscreenApp ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0,
+            SetWindowPos(toHwnd(window), fullscreenApp && ! stayOverFullscreen ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             break;
 

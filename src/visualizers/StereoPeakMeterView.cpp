@@ -30,10 +30,17 @@ void StereoPeakMeterView::clearLevels()
     repaint();
 }
 
-void StereoPeakMeterView::mouseDown(const juce::MouseEvent&)
+void StereoPeakMeterView::mouseDown(const juce::MouseEvent& e)
 {
-    if (onResetRequested)
+    if (e.mods.isPopupMenu())
+    {
+        if (onContextMenu)
+            onContextMenu();
+    }
+    else if (onResetRequested)
+    {
         onResetRequested();
+    }
 }
 
 float StereoPeakMeterView::yForDb(float db, juce::Rectangle<float> bar) const noexcept

@@ -225,6 +225,7 @@ MainComponent::MainComponent(AudioEngine& audioEngine, AppSettings& appSettings)
     addAndMakeVisible(statusLabel);
 
     meterView.onResetRequested = [this] { engine.resetPeaks(); };
+    meterView.onContextMenu = [this] { showContextMenu(); };
     addAndMakeVisible(spectrumView);
     addAndMakeVisible(meterView);
 
@@ -293,39 +294,27 @@ void MainComponent::refreshDeviceListIfChanged()
     }
 }
 
-void MainComponent::rebuildDeviceBox()
+std::vector<MainComponent::SourceEntry> MainComponent::sourceEntries() const
 {
     const auto& devices = knownDevices;
     const auto& current = engine.selection();
-
-    deviceChoices.clear();
-    deviceBox.clear(juce::dontSendNotification);
-
-    int selectedId = 0;
-    auto addChoice = [&](const juce::String& label, DeviceSelection selection)
-    {
-        deviceChoices.push_back(std::move(selection));
-        const int id = (int) deviceChoices.size();
-        deviceBox.addItem(label, id);
-        if (deviceChoices.back() == current)
-            selectedId = id;
-    };
+    std::vector<SourceEntry> entries;
 
     auto addSection = [&](DeviceKind kind, const juce::String& heading, const juce::String& defaultLabel)
     {
-        deviceBox.addSectionHeading(heading);
-        addChoice(defaultLabel, { kind, {} });
+        entries.push_back({ heading, {}, {} });
+        entries.push_back({ {}, defaultLabel, { kind, {} } });
         for (const auto& device : devices)
             if (device.kind == kind)
-                addChoice(juce::String::fromUTF8(device.name.c_str()) + (device.isDefault ? "  (default)" : ""),
-                          { kind, device.id });
+                entries.push_back({ {}, juce::String::fromUTF8(device.name.c_str()) + (device.isDefault ? "  (default)" : ""),
+                                    { kind, device.id } });
     };
 
     addSection(DeviceKind::PlaybackLoopback, "Playback - loopback (what you hear)", "System default output");
     addSection(DeviceKind::RecordingInput, "Recording inputs", "System default input");
 
     // One entry per program that has an audio session; captures only that program.
-    deviceBox.addSectionHeading("Applications (only that app's audio)");
+    entries.push_back({ "Applications (only that app's audio)", {}, {} });
     bool currentAppListed = false;
     for (const auto& device : devices)
     {
@@ -334,12 +323,37 @@ void MainComponent::rebuildDeviceBox()
 
         DeviceSelection selection { DeviceKind::Application, {}, device.processName, device.processId };
         currentAppListed = currentAppListed || selection == current;
-        addChoice(juce::String::fromUTF8(device.name.c_str()) + (device.isPlaying ? "  - playing" : ""), selection);
+        entries.push_back({ {}, juce::String::fromUTF8(device.name.c_str()) + (device.isPlaying ? "  - playing" : ""), selection });
     }
 
     // Keep a saved app selectable while it isn't running or hasn't played anything yet.
     if (current.kind == DeviceKind::Application && ! currentAppListed && ! current.processName.empty())
-        addChoice(juce::String(current.processName.c_str()) + "  (no audio yet)", current);
+        entries.push_back({ {}, juce::String(current.processName.c_str()) + "  (no audio yet)", current });
+
+    return entries;
+}
+
+void MainComponent::rebuildDeviceBox()
+{
+    const auto& current = engine.selection();
+
+    deviceChoices.clear();
+    deviceBox.clear(juce::dontSendNotification);
+
+    int selectedId = 0;
+    for (auto& entry : sourceEntries())
+    {
+        if (entry.heading.isNotEmpty())
+        {
+            deviceBox.addSectionHeading(entry.heading);
+            continue;
+        }
+        deviceChoices.push_back(std::move(entry.selection));
+        const int id = (int) deviceChoices.size();
+        deviceBox.addItem(entry.label, id);
+        if (deviceChoices.back() == current)
+            selectedId = id;
+    }
 
     if (selectedId != 0)
         deviceBox.setSelectedId(selectedId, juce::dontSendNotification);
@@ -353,10 +367,67 @@ void MainComponent::openSelectedDevice()
     if (id <= 0 || id > (int) deviceChoices.size())
         return;
 
-    const auto selection = deviceChoices[(size_t) id - 1];
+    selectDevice(deviceChoices[(size_t) id - 1]);
+}
+
+void MainComponent::selectDevice(const DeviceSelection& selection)
+{
     engine.open(selection);
     settings.setDeviceSelection(selection);
+    rebuildDeviceBox(); // keep the source box in step when the choice came from the menu
     updateStatus();
+}
+
+juce::PopupMenu MainComponent::sourceMenu()
+{
+    refreshDeviceListIfChanged(); // apps come and go; show what is there now
+
+    juce::PopupMenu menu;
+    const auto& current = engine.selection();
+    for (const auto& entry : sourceEntries())
+    {
+        if (entry.heading.isNotEmpty())
+            menu.addSectionHeader(entry.heading);
+        else
+            menu.addItem(entry.label, true, entry.selection == current,
+                         [this, selection = entry.selection] { selectDevice(selection); });
+    }
+    return menu;
+}
+
+juce::PopupMenu MainComponent::spectrumMenu()
+{
+    // The control-bar settings, for when the bar is hidden (stick, overlay, H).
+    // Each goes through its control so engine, view and settings stay in step.
+    auto near = [](const juce::Slider& s, double v) { return std::abs(s.getValue() - v) < 1.0e-3 * (s.getMaximum() - s.getMinimum()); };
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("FFT size");
+    for (int size : { 1024, 2048, 4096, 8192 })
+        menu.addItem("FFT " + juce::String(size), true, fftBox.getSelectedId() == size,
+                     [this, size] { fftBox.setSelectedId(size, juce::sendNotificationSync); });
+
+    auto addSliderChoices = [&](const juce::String& heading, juce::Slider& slider, std::initializer_list<double> values)
+    {
+        menu.addSectionHeader(heading);
+        bool currentListed = false;
+        for (double v : values)
+        {
+            currentListed = currentListed || near(slider, v);
+            menu.addItem(slider.getTextFromValue(v), true, near(slider, v),
+                         [&slider, v] { slider.setValue(v, juce::sendNotificationSync); });
+        }
+        if (! currentListed) // a value set on the bar's slider: show it, ticked
+            menu.addItem(slider.getTextFromValue(slider.getValue()) + "  (current)", false, true, nullptr);
+    };
+    addSliderChoices("Smoothing", smoothingSlider, { 0.0, 0.3, 0.5, 0.7, 0.85 });
+    addSliderChoices("Fall speed", decaySlider, { 12.0, 30.0, 60.0, 120.0, 240.0 });
+    addSliderChoices("Tilt", tiltSlider, { 0.0, 3.0, 4.5, 6.0 });
+
+    menu.addSeparator();
+    menu.addItem("Peak hold", true, peakHoldButton.getToggleState(),
+                 [this] { peakHoldButton.setToggleState(! peakHoldButton.getToggleState(), juce::sendNotificationSync); });
+    return menu;
 }
 
 void MainComponent::updateStatus()
@@ -760,7 +831,7 @@ void MainComponent::showContextMenu()
     for (float minimum : { 60.0f, 70.0f, 85.0f, 100.0f })
         modulesMenu.addItem(juce::String(juce::roundToInt(minimum)) + " - " + juce::String(juce::roundToInt(minimum * 2.0f)) + " BPM",
                             showTempo, std::abs(tempoRangeMinimum - minimum) < 0.5f, [this, minimum] { setTempoRange(minimum); });
-    modulesMenu.addItem("Tap tempo\tB", showTempo, false, [this] { tempoView.tap(); });
+    modulesMenu.addItem("Tap tempo (press B on each beat)\tB", showTempo, false, [this] { tempoView.tap(); });
 
     juce::PopupMenu themeMenu;
     for (const auto& preset : theme::presets())
@@ -769,8 +840,16 @@ void MainComponent::showContextMenu()
     themeMenu.addSeparator();
     themeMenu.addItem("Customise colours...\tC", [this] { showColourPanel(); });
 
+    // The current source, named so it is clear even with the status line hidden.
+    juce::String sourceName = juce::String::fromUTF8(engine.status().deviceName.c_str());
+    if (sourceName.isEmpty())
+        sourceName = "none";
+
     juce::PopupMenu menu;
+    menu.addSubMenu("Audio source: " + sourceName.substring(0, 40), sourceMenu());
+    menu.addSeparator();
     menu.addSubMenu("View", viewMenu);
+    menu.addSubMenu("Spectrum", spectrumMenu());
     menu.addSubMenu("Waveform", waveMenu);
     menu.addSubMenu("Spectrogram", sgramMenu);
     menu.addSubMenu("Modules (BPM / Key)", modulesMenu);
@@ -788,8 +867,19 @@ void MainComponent::showContextMenu()
         stickMenu.addItem("Bar height " + juce::String(height) + " px", true, w->stickHeight() == height,
                           [w, height] { w->setStickHeight(height); });
     menu.addSubMenu("Stick to screen edge", stickMenu);
-    menu.addItem("Always on top\tT", true, w->isPinnedOnTop(), [w] { w->setPinnedOnTop(! w->isPinnedOnTop()); });
-    menu.addItem("Overlay mode (no frame)\tO", true, w->isOverlayMode(), [w] { w->setOverlayMode(! w->isOverlayMode()); });
+    // A stuck bar is always frameless and on top of normal windows; "always on top"
+    // then decides whether it also stays over fullscreen apps (videos, games).
+    if (w->isStuck())
+    {
+        menu.addItem("Always on top, even over fullscreen apps\tT", true, w->isPinnedOnTop(),
+                     [w] { w->setPinnedOnTop(! w->isPinnedOnTop()); });
+        menu.addItem("Overlay mode (always, while stuck)", false, true, nullptr);
+    }
+    else
+    {
+        menu.addItem("Always on top\tT", true, w->isPinnedOnTop(), [w] { w->setPinnedOnTop(! w->isPinnedOnTop()); });
+        menu.addItem("Overlay mode (no frame)\tO", true, w->isOverlayMode(), [w] { w->setOverlayMode(! w->isOverlayMode()); });
+    }
     menu.addItem("Show controls\tH", true, controlsVisible, [this] { toggleControls(); });
     menu.addSubMenu("Opacity", opacityMenu);
     menu.addSeparator();
@@ -823,7 +913,8 @@ void MainComponent::mouseDrag(const juce::MouseEvent& e)
 
 void MainComponent::mouseDoubleClick(const juce::MouseEvent&)
 {
-    if (auto* w = window(); w != nullptr && w->isOverlayMode())
+    // Double-click leaves overlay mode, but must not knock a stuck bar loose by accident.
+    if (auto* w = window(); w != nullptr && w->isOverlayMode() && ! w->isStuck())
         w->setOverlayMode(false);
 }
 
@@ -872,7 +963,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         w->setPinnedOnTop(! w->isPinnedOnTop());
         return true;
     }
-    if (c == 'o' && w != nullptr)
+    if (c == 'o' && w != nullptr && ! w->isStuck()) // stuck bars are always frameless
     {
         w->setOverlayMode(! w->isOverlayMode());
         return true;

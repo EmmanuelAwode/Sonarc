@@ -72,6 +72,19 @@ private:
     void updateModules();
     void setTempoRange(float minimumBpm);
 
+    // Audio sources, shared by the source box and the right-click menu (which is
+    // the only way to switch while the controls are hidden, e.g. when stuck).
+    struct SourceEntry
+    {
+        juce::String heading; // non-empty: a section heading, not a choice
+        juce::String label;
+        DeviceSelection selection;
+    };
+    std::vector<SourceEntry> sourceEntries() const;
+    juce::PopupMenu sourceMenu();
+    juce::PopupMenu spectrumMenu();
+    void selectDevice(const DeviceSelection&);
+
     void refreshDeviceList();
     void refreshDeviceListIfChanged();
     void rebuildDeviceBox();

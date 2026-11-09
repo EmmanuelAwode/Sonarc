@@ -115,6 +115,7 @@ void MainWindow::setOverlayMode(bool shouldBeOverlay)
 void MainWindow::setPinnedOnTop(bool shouldBeOnTop)
 {
     pinned = shouldBeOnTop;
+    appBar.setStayOverFullscreen(pinned);
     setAlwaysOnTop(pinned || isStuck());
     if (pinned && getPeer() != nullptr)
         desktop::bringToTopmost(getPeer()->getNativeHandle());
@@ -188,8 +189,10 @@ void MainWindow::dock()
 void MainWindow::timerCallback()
 {
     // Watchdog: if another app has covered us while pinned or docked, step back on top.
-    // Skipped while one of our own menus is open and while a fullscreen app owns the screen.
-    if (! (pinned || isStuck()) || appBar.isFullscreenAppActive() || juce::Component::getCurrentlyModalComponent() != nullptr)
+    // Skipped while one of our own menus is open, and while a fullscreen app owns the
+    // screen unless the user pinned Sonarc on top (e.g. a bar over a fullscreen video).
+    if (! (pinned || isStuck()) || (appBar.isFullscreenAppActive() && ! pinned)
+        || juce::Component::getCurrentlyModalComponent() != nullptr)
         return;
 
     if (auto* peer = getPeer(); peer != nullptr && desktop::isCoveredByAnotherApp(peer->getNativeHandle()))

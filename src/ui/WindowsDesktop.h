@@ -39,6 +39,9 @@ public:
     // steps out of the way and must not be forced back on top.
     bool isFullscreenAppActive() const noexcept { return fullscreenApp; }
 
+    // When set, the bar stays on top even over fullscreen apps (the user pinned it).
+    void setStayOverFullscreen(bool shouldStay);
+
     void setThickness(int thickness);
 
     // Internal: called from the window subclass for app-bar notifications.
@@ -50,6 +53,7 @@ private:
     Edge edge = Edge::Top;
     int thickness = 100;
     bool fullscreenApp = false;
+    bool stayOverFullscreen = false;
     PlaceCallback place;
 };
 
