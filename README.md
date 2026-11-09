@@ -1,8 +1,22 @@
 # Sonarc
 
-A lightweight real-time audio meter for Windows 10/11, written in C++20 with JUCE. It captures live audio (system output via WASAPI loopback, or any input device), analyzes it and draws meters.
+A lightweight real-time audio visualiser for Windows 10/11, written in C++20 with JUCE. It captures live audio (what you hear, a microphone, or a single app such as Spotify, a browser or FL Studio) and shows a spectrum, waveform, spectrogram, stereo meters, BPM and musical key. It can dock to the top or bottom of the screen as a bar that stays above other windows, which suits livestreams.
 
-**Status: Phase 1 (MVP).** It has a spectrum analyzer, a stereo peak/RMS meter, device selection with hot-plug reconnection, and persistent settings.
+## Download & install
+
+1. Go to the [**latest release**](../../releases/latest) and download `Sonarc-<version>-windows-x64.zip`.
+2. Unzip it, then double-click **Install Sonarc.cmd**. Sonarc is added to the **Start menu** and the **desktop**. It installs for your user only, so no admin rights are needed.
+3. **Taskbar:** open Sonarc from Start, right-click its taskbar icon and choose **Pin to taskbar**.
+
+Notes:
+- Windows may say *"Windows protected your PC"* because Sonarc isn't code-signed. Click **More info → Run anyway**.
+- You can also skip installing and run `Sonarc.exe` straight from the unzipped folder.
+- **Uninstall:** double-click **Uninstall Sonarc.cmd** from the zip. Your settings in `%APPDATA%\Sonarc` are kept.
+- Requires Windows 10 version 2004 or later, or Windows 11, on 64-bit (x64).
+
+Quick start: play some audio, and Sonarc follows your default output. Pick a different source in the top-left box, or right-click anywhere for every option. The [Using it](#using-it) section covers each feature, and [Build on Windows](#build-on-windows) covers building from source.
+
+Licence: [AGPLv3](LICENSE). Sonarc uses [JUCE](https://juce.com) under its AGPLv3 option.
 
 ---
 

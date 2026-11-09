@@ -10,11 +10,18 @@
 # it from Start, right-click its taskbar icon and choose "Pin to taskbar" (Windows
 # doesn't let programs pin themselves).
 param(
-    [string]$Exe = "$env:LOCALAPPDATA\SonarcBuild\src\Sonarc_artefacts\Release\Sonarc.exe",
+    [string]$Exe = "",
     [switch]$NoDesktop,
     [switch]$Uninstall
 )
 $ErrorActionPreference = "Stop"
+
+# From the downloaded release zip, Sonarc.exe sits next to this script;
+# in a source checkout, use the local build.
+if (-not $Exe) {
+    $beside = Join-Path $PSScriptRoot "Sonarc.exe"
+    $Exe = if (Test-Path $beside) { $beside } else { "$env:LOCALAPPDATA\SonarcBuild\src\Sonarc_artefacts\Release\Sonarc.exe" }
+}
 
 $installDir = Join-Path $env:LOCALAPPDATA "Programs\Sonarc"
 $installedExe = Join-Path $installDir "Sonarc.exe"
