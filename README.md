@@ -4,17 +4,37 @@ A lightweight real-time audio visualiser for Windows 10/11, written in C++20 wit
 
 ## Download & install
 
-1. Go to the [**latest release**](../../releases/latest) and download `Sonarc-<version>-windows-x64.zip`.
-2. Unzip it, then double-click **Install Sonarc.cmd**. Sonarc is added to the **Start menu** and the **desktop**. It installs for your user only, so no admin rights are needed.
-3. **Taskbar:** open Sonarc from Start, right-click its taskbar icon and choose **Pin to taskbar**.
+**You need:** a 64-bit PC with Windows 11, or Windows 10 version 2004 or later. No admin rights, no other software.
 
-Notes:
-- Windows may say *"Windows protected your PC"* because Sonarc isn't code-signed. Click **More info → Run anyway**.
-- You can also skip installing and run `Sonarc.exe` straight from the unzipped folder.
-- **Uninstall:** double-click **Uninstall Sonarc.cmd** from the zip. Your settings in `%APPDATA%\Sonarc` are kept.
-- Requires Windows 10 version 2004 or later, or Windows 11, on 64-bit (x64).
+### Install in 5 steps
 
-Quick start: play some audio, and Sonarc follows your default output. Pick a different source in the top-left box, or right-click anywhere for every option. The [Using it](#using-it) section covers each feature, and [Build on Windows](#build-on-windows) covers building from source.
+1. **Download.** Open the [**latest release**](../../releases/latest). Under **Assets**, click **`Sonarc-<version>-windows-x64.zip`** (about 2 MB).
+   Don't pick "Source code": that's for developers and has no app in it.
+2. **Unzip.** In your Downloads folder, right-click the zip and choose **Extract All… → Extract**.
+   Don't just double-click into the zip: the installer can't run from inside it.
+3. **Install.** In the extracted folder, double-click **`Install Sonarc.cmd`**.
+   - If Windows says *"Windows protected your PC"*, click **More info → Run anyway**. This appears because Sonarc isn't code-signed by a paid certificate.
+   - A small window lists what it did and ends with *"Done"*. Press any key to close it.
+4. **Open it.** Sonarc is now in the **Start menu** and on your **desktop**. Click either one. The first time it opens, Windows may show the same *"protected your PC"* message: again **More info → Run anyway**.
+5. **Pin to the taskbar (optional).** While Sonarc is open, right-click its icon in the taskbar and choose **Pin to taskbar**. Windows doesn't let apps pin themselves, so this step is yours.
+
+That's it. Play some music or a video and the visualiser reacts straight away. You can delete the zip and the extracted folder afterwards; Sonarc runs from `%LOCALAPPDATA%\Programs\Sonarc`.
+
+### Updating, uninstalling, portable use
+
+- **Update:** download the newer zip and repeat steps 2–3. It replaces the old version and keeps your settings. Close Sonarc first (the installer will try to close it for you).
+- **Uninstall:** double-click **`Uninstall Sonarc.cmd`** in the extracted folder. It removes the app and its shortcuts. Your settings in `%APPDATA%\Sonarc` are kept; delete that folder too for a clean removal.
+- **No install:** you can also just double-click `Sonarc.exe` in the extracted folder and use it from there.
+
+### If something goes wrong
+
+- **"Run anyway" isn't shown:** click the **More info** link first; the button only appears after that.
+- **The install window flashes and closes, or shows red text:** make sure you extracted the zip (step 2), then try again. If it says Sonarc is still running, close it and run the installer again.
+- **No movement in the visualiser:** check that sound is actually playing, then pick your speakers or headphones in the box at the top left (or right-click anywhere → **Audio source**).
+
+### First steps
+
+Sonarc follows your default output (what you hear) out of the box. Pick a different source, such as a microphone or a single app like Spotify, in the top-left box, or right-click anywhere for every option. The [Using it](#using-it) section covers each feature, and [Build on Windows](#build-on-windows) covers building from source.
 
 Licence: [AGPLv3](LICENSE). Sonarc uses [JUCE](https://juce.com) under its AGPLv3 option.
 
