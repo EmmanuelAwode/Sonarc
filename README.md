@@ -2,6 +2,8 @@
 
 A lightweight real-time audio visualiser for Windows 10/11, written in C++20 with JUCE. It captures live audio (what you hear, a microphone, or a single app such as Spotify, a browser or FL Studio) and shows a spectrum, waveform, spectrogram, stereo meters, BPM and musical key. It can dock to the top or bottom of the screen as a bar that stays above other windows, which suits livestreams.
 
+This repository also holds **Driftwave FX**, a slowed + reverb VST3 effect plugin for FL Studio: see [driftwave-vst](driftwave-vst/README.md) for its download and instructions.
+
 ## Download & install
 
 **You need:** a 64-bit PC with Windows 11, or Windows 10 version 2004 or later. No admin rights, no other software.
